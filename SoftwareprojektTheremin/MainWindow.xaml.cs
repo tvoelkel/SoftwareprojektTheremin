@@ -152,7 +152,7 @@ namespace SoftwareprojektTheremin
                         }
                     }
                 }
-
+                bitmap.RotateFlip(RotateFlipType.Rotate180FlipY);
                 MemoryStream memoryStream = new MemoryStream();
                 bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                 memoryStream.Position = 0;
@@ -184,6 +184,8 @@ namespace SoftwareprojektTheremin
             update.Abort();
 
             // Dispose RealSense objects
+            blobModule.Dispose();
+            blobData.Dispose();
             senseManager.Dispose();
             session.Dispose();
         }
