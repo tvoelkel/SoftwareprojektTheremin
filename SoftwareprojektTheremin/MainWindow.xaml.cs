@@ -26,6 +26,11 @@ namespace SoftwareprojektTheremin
         private PXCMSession session;
         private PXCMSenseManager senseManager;
         private Thread update;
+        private PXCMBlobModule blobModule;
+        private PXCMBlobConfiguration blobConfig;
+        private PXCMBlobData blobData;
+        private PXCMBlobData.IBlob[] blobList = new PXCMBlobData.IBlob[2];
+        private int trackingDistance = 1000;
 
         public MainWindow()
         {
@@ -35,7 +40,20 @@ namespace SoftwareprojektTheremin
             session = PXCMSession.CreateInstance();
             senseManager = session.CreateSenseManager();
             senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, 640, 480, 30);
+            senseManager.EnableBlob();
             senseManager.Init();
+
+            //Create blobModule from SenseManager
+            blobModule = senseManager.QueryBlob();
+            blobConfig = blobModule.CreateActiveConfiguration();
+            blobConfig.SetMaxBlobs(2);
+            blobConfig.SetMaxDistance(trackingDistance);
+            blobConfig.SetMaxObjectDepth(100);
+            blobConfig.SetMinPixelCount(400);
+            blobConfig.ApplyChanges();
+            blobData = blobModule.CreateOutput();
+
+
 
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
@@ -50,13 +68,49 @@ namespace SoftwareprojektTheremin
                 PXCMCapture.Sample sample = senseManager.QuerySample();
                 Bitmap colorBitmap;
                 PXCMImage.ImageData colorData;
+                blobData.Update();
+                float Left = 0;
+                float Right = 0;
+
+                 /*while (blobData.QueryNumberOfBlobs() < 2)
+                 {
+                     trackingDistance += 100;
+                     blobConfig.SetMaxDistance(trackingDistance);
+                     blobConfig.ApplyChanges();
+                     blobData.Update();
+
+                    if(trackingDistance > 3000)
+                    {
+                        trackingDistance = 600;
+                    }
+                 }
+                 */
+       
+
+                for (int i = 0; i<2; i++)
+                {
+                    blobData.QueryBlobByAccessOrder(i, PXCMBlobData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, out blobList[i]);
+                }
+                if (blobData.QueryNumberOfBlobs() == 2)
+                {
+                    if (blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x > blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x)
+                    {
+                        Right = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        Left = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                    }
+                    else
+                    {
+                        Right = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        Left = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                    }
+                }
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
 
                 // Update UI
-                Render(colorBitmap);
+                Render(colorBitmap, Left, Right);
 
                 // Release frame
                 colorBitmap.Dispose();
@@ -65,7 +119,7 @@ namespace SoftwareprojektTheremin
             }
         }
 
-        private void Render(Bitmap bitmap)
+        private void Render(Bitmap bitmap, float left, float right)
         {
             BitmapImage bitmapImage = ConvertBitmap(bitmap);
 
@@ -75,6 +129,8 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
+                    labelR.Content = right;
+                    labelL.Content = left;
                 }));
             }
         }
@@ -82,9 +138,21 @@ namespace SoftwareprojektTheremin
         private BitmapImage ConvertBitmap(Bitmap bitmap)
         {
             BitmapImage bitmapImage = null;
+            System.Drawing.Pen fancyPen = new System.Drawing.Pen(System.Drawing.Color.Cyan, 5);
 
             if (bitmap != null)
             {
+                if (blobData.QueryNumberOfBlobs() == 2)
+                {
+                    for (int i = 0; i < 2; i++)
+                    {
+                        using (var graphics = Graphics.FromImage(bitmap))
+                        {
+                            graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x-50, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
+                        }
+                    }
+                }
+
                 MemoryStream memoryStream = new MemoryStream();
                 bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                 memoryStream.Position = 0;

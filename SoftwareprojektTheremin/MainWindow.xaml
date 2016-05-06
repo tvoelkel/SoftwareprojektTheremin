@@ -5,11 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SoftwareprojektTheremin"
         mc:Ignorable="d"
-        Title="MainWindow" Height="550" Width="800">
-    <Grid>
-        <StackPanel HorizontalAlignment="Left" Height="482" Margin="18,18,0,0" VerticalAlignment="Top" Width="757">
-            <Image x:Name="imgStream" Height="479" Margin="10,0,0,0" HorizontalAlignment="Left" Width="737"/>
+        Title="MainWindow" Height="700" Width="700">
+    <Grid Margin="0,0,-171.4,-44.6">
+        <StackPanel HorizontalAlignment="Left" Height="480" Margin="0,0,0,0" VerticalAlignment="Top" Width="700">
+            <Image x:Name="imgStream" Height="480" Width="640" Margin="0,0,0,0"/>
         </StackPanel>
+        <Label x:Name="labelR" Content="Right" HorizontalAlignment="Left" Height="37" Margin="519,556,0,0" VerticalAlignment="Top" Width="62"/>
+        <Label x:Name="labelL" Content="Left" HorizontalAlignment="Left" Height="37" Margin="53,556,0,0" VerticalAlignment="Top" Width="60"/>
 
     </Grid>
 </Window>
