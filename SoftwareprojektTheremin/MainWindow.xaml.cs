@@ -1,20 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Drawing;
 using System.IO;
 using System.Threading;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using NAudio.Wave.SampleProviders;
+using NAudio.Wave.WaveFormats;
+using System.Diagnostics;
+using NAudio;
+using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
@@ -35,6 +29,9 @@ namespace SoftwareprojektTheremin
         private PXCMBlobData blobData;
         private PXCMBlobData.IBlob[] blobList = new PXCMBlobData.IBlob[2];
         private int trackingDistance = 1000;
+        private int frequency = 35;
+        private float volume = 0.5F;
+        private Thread ton;
 
         public MainWindow()
         {
@@ -63,6 +60,33 @@ namespace SoftwareprojektTheremin
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
             update.Start();
+
+            ton = new Thread(delegate () { gen(frequency, volume); });
+            ton.Start();
+        }
+
+        public static void gen(int freq, float volume)
+        {
+            // keine Tonausgabe, falls Freuqenz kleiner als 37
+            if (freq< 37) { }
+            else
+            {
+                WaveOut _waveOutGene = new WaveOut();
+                SignalGenerator wg = new SignalGenerator();
+                wg.Type = SignalGeneratorType.Sin;
+                wg.Frequency = freq;
+                _waveOutGene.Volume = volume;
+
+                _waveOutGene.Init(wg);
+
+                //solange Ton ausgeben bis Thread beendet wird
+                while (true)
+                {
+                    _waveOutGene.Play();
+                }
+                //ToDo
+                _waveOutGene.Dispose();
+            }
         }
 
         private void Update()
@@ -111,6 +135,17 @@ namespace SoftwareprojektTheremin
                         blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
                     }
                 }
+
+                // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
+                frequency = (int)coordinates.LEFT;
+                volume = (float)coordinates.RIGHT / 100;
+                                if ((volume > 1) || (volume <= 0))
+                {
+                    volume = 0.5F;
+                }
+                ton.Abort();
+                ton = new Thread(delegate () { gen(frequency, volume); });
+                ton.Start();
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
