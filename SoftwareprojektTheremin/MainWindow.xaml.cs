@@ -23,7 +23,11 @@ namespace SoftwareprojektTheremin
     /// </summary>
     public partial class MainWindow : Window
     {
+        enum coordinates{
+            LEFT = 0, RIGHT = 1, X = 0, Y = 1
+        };
         private PXCMSession session;
+        private float[,] blobCoordinates = new float[4,2] { { -1, -1 },{ -1, -1 },{ -1, -1 }, { -1, -1 } };
         private PXCMSenseManager senseManager;
         private Thread update;
         private PXCMBlobModule blobModule;
@@ -50,6 +54,7 @@ namespace SoftwareprojektTheremin
             blobConfig.SetMaxDistance(trackingDistance);
             blobConfig.SetMaxObjectDepth(100);
             blobConfig.SetMinPixelCount(400);
+            blobConfig.EnableColorMapping(true);
             blobConfig.ApplyChanges();
             blobData = blobModule.CreateOutput();
 
@@ -69,23 +74,22 @@ namespace SoftwareprojektTheremin
                 Bitmap colorBitmap;
                 PXCMImage.ImageData colorData;
                 blobData.Update();
-                float Left = 0;
-                float Right = 0;
 
-                 /*while (blobData.QueryNumberOfBlobs() < 2)
-                 {
-                     trackingDistance += 100;
-                     blobConfig.SetMaxDistance(trackingDistance);
-                     blobConfig.ApplyChanges();
-                     blobData.Update();
+                /*while (blobData.QueryNumberOfBlobs() < 2)
+                {
+                    trackingDistance += 100;
+                    blobConfig.SetMaxDistance(trackingDistance);
+                    blobConfig.ApplyChanges();
+                    blobData.Update();
+                    
+                    senseManager.ReleaseFrame();
 
-                    if(trackingDistance > 3000)
-                    {
-                        trackingDistance = 600;
-                    }
-                 }
-                 */
-       
+                   if(trackingDistance > 3000)
+                   {
+                       trackingDistance = 600;
+                   }
+                }
+                */
 
                 for (int i = 0; i<2; i++)
                 {
@@ -93,15 +97,18 @@ namespace SoftwareprojektTheremin
                 }
                 if (blobData.QueryNumberOfBlobs() == 2)
                 {
+                    if(blobCoordinates[3, (int)coordinates.Y] == -1) {
+                        //smoothing
+                    }
                     if (blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x > blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x)
                     {
-                        Right = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        Left = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)coordinates.LEFT,(int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
                     }
                     else
                     {
-                        Right = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        Left = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
                     }
                 }
 
@@ -110,7 +117,7 @@ namespace SoftwareprojektTheremin
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
 
                 // Update UI
-                Render(colorBitmap, Left, Right);
+                Render(colorBitmap);
 
                 // Release frame
                 colorBitmap.Dispose();
@@ -119,7 +126,7 @@ namespace SoftwareprojektTheremin
             }
         }
 
-        private void Render(Bitmap bitmap, float left, float right)
+        private void Render(Bitmap bitmap)
         {
             BitmapImage bitmapImage = ConvertBitmap(bitmap);
 
@@ -129,8 +136,8 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
-                    labelR.Content = right;
-                    labelL.Content = left;
+                    labelR.Content = blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y];
+                    labelL.Content = blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y];
                 }));
             }
         }
