@@ -4,11 +4,6 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using NAudio.Wave.SampleProviders;
-using NAudio.Wave.WaveFormats;
-using System.Diagnostics;
-using NAudio;
-using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
@@ -17,9 +12,10 @@ namespace SoftwareprojektTheremin
     /// </summary>
     public partial class MainWindow : Window
     {
-        enum coordinates{
+        enum coordinates: int{
             LEFT = 0, RIGHT = 1, X = 0, Y = 1
         };
+        private static bool isPlaying = false;
         private PXCMSession session;
         private float[,] blobCoordinates = new float[4,2] { { -1, -1 },{ -1, -1 },{ -1, -1 }, { -1, -1 } };
         private PXCMSenseManager senseManager;
@@ -29,9 +25,8 @@ namespace SoftwareprojektTheremin
         private PXCMBlobData blobData;
         private PXCMBlobData.IBlob[] blobList = new PXCMBlobData.IBlob[2];
         private int trackingDistance = 1000;
-        private int frequency = 35;
-        private float volume = 0.5F;
-        private Thread ton;
+        private static UInt32 frequency;
+        private static UInt32 volume;
 
         public MainWindow()
         {
@@ -61,32 +56,7 @@ namespace SoftwareprojektTheremin
             update = new Thread(new ThreadStart(Update));
             update.Start();
 
-            ton = new Thread(delegate () { gen(frequency, volume); });
-            ton.Start();
-        }
 
-        public static void gen(int freq, float volume)
-        {
-            // keine Tonausgabe, falls Freuqenz kleiner als 37
-            if (freq< 37) { }
-            else
-            {
-                WaveOut _waveOutGene = new WaveOut();
-                SignalGenerator wg = new SignalGenerator();
-                wg.Type = SignalGeneratorType.Sin;
-                wg.Frequency = freq;
-                _waveOutGene.Volume = volume;
-
-                _waveOutGene.Init(wg);
-
-                //solange Ton ausgeben bis Thread beendet wird
-                while (true)
-                {
-                    _waveOutGene.Play();
-                }
-                //ToDo
-                _waveOutGene.Dispose();
-            }
         }
 
         private void Update()
@@ -136,17 +106,6 @@ namespace SoftwareprojektTheremin
                     }
                 }
 
-                // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
-                frequency = (int)coordinates.LEFT;
-                volume = (float)coordinates.RIGHT / 100;
-                                if ((volume > 1) || (volume <= 0))
-                {
-                    volume = 0.5F;
-                }
-                ton.Abort();
-                ton = new Thread(delegate () { gen(frequency, volume); });
-                ton.Start();
-
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
@@ -154,6 +113,15 @@ namespace SoftwareprojektTheremin
                 // Update UI
                 Render(colorBitmap);
 
+                //Play Sound
+                frequency = (uint)(500 - blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y]) * 2;
+                volume = (uint)(500- blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y]) * 42;
+                if (!isPlaying)
+                {
+                    PlaySound();
+                }
+           
+                
                 // Release frame
                 colorBitmap.Dispose();
                 sample.color.ReleaseAccess(colorData);
@@ -218,6 +186,58 @@ namespace SoftwareprojektTheremin
         {
             ShutDown();
             this.Close();
+        }
+
+        private static void PlaySound()
+        {
+            var mStrm = new MemoryStream();
+            BinaryWriter writer = new BinaryWriter(mStrm);
+            isPlaying = true;
+
+            const double TAU = 2 * Math.PI;
+            int formatChunkSize = 16;
+            int headerSize = 8;
+            short formatType = 1;
+            short tracks = 1;
+            int samplesPerSecond = 44100;
+            short bitsPerSample = 16;
+            short frameSize = (short)(tracks * ((bitsPerSample + 7) / 8));
+            int bytesPerSecond = samplesPerSecond * frameSize;
+            int waveSize = 4;
+            int samples = (int)((decimal)samplesPerSecond * 20000 / 1000);
+            int dataChunkSize = samples * frameSize;
+            int fileSize = waveSize + headerSize + formatChunkSize + headerSize + dataChunkSize;
+            // var encoding = new System.Text.UTF8Encoding();
+            writer.Write(0x46464952); // = encoding.GetBytes("RIFF")
+            writer.Write(fileSize);
+            writer.Write(0x45564157); // = encoding.GetBytes("WAVE")
+            writer.Write(0x20746D66); // = encoding.GetBytes("fmt ")
+            writer.Write(formatChunkSize);
+            writer.Write(formatType);
+            writer.Write(tracks);
+            writer.Write(samplesPerSecond);
+            writer.Write(bytesPerSecond);
+            writer.Write(frameSize);
+            writer.Write(bitsPerSample);
+            writer.Write(0x61746164); // = encoding.GetBytes("data")
+            writer.Write(dataChunkSize);
+            {
+                //double theta = frequency * TAU / (double)samplesPerSecond;
+                // 'volume' is UInt16 with range 0 thru Uint16.MaxValue ( = 65 535)
+                // we need 'amp' to have the range of 0 thru Int16.MaxValue ( = 32 767)
+                //double amp = volume >> 2; // so we simply set amp = volume / 2
+                for (int step = 0; step < samples; step++)
+                {
+                    short s = (short)((volume>>2) * Math.Sin((frequency * TAU/(double)samplesPerSecond) * (double)step));
+                    writer.Write(s);
+                }
+            }
+
+            mStrm.Seek(0, SeekOrigin.Begin);
+            new System.Media.SoundPlayer(mStrm).Play();
+            isPlaying = false;
+            writer.Close();
+            mStrm.Close();
         }
 
         private void ShutDown()
