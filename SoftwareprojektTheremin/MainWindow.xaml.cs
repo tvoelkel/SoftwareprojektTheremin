@@ -12,6 +12,68 @@ using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
+    public abstract class WaveProvider32 : IWaveProvider
+{
+    private WaveFormat waveFormat;
+    
+    public WaveProvider32()
+        : this(44100, 1)
+    {
+    }
+
+    public WaveProvider32(int sampleRate, int channels)
+    {
+        SetWaveFormat(sampleRate, channels);
+    }
+
+    public void SetWaveFormat(int sampleRate, int channels)
+    {
+        this.waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
+    }
+
+    public int Read(byte[] buffer, int offset, int count)
+    {
+        WaveBuffer waveBuffer = new WaveBuffer(buffer);
+        int samplesRequired = count / 4;
+        int samplesRead = Read(waveBuffer.FloatBuffer, offset / 4, samplesRequired);
+        return samplesRead * 4;
+    }
+
+    public abstract int Read(float[] buffer, int offset, int sampleCount);
+
+    public WaveFormat WaveFormat
+    {
+        get { return waveFormat; }
+    }
+}
+    
+    public class SineWaveProvider32 : WaveProvider32
+{
+    int sample;
+
+    public SineWaveProvider32()
+    {
+        Frequency = 1000;
+        Amplitude = 0.25f; // let's not hurt our ears            
+    }
+
+    public float Frequency { get; set; }
+    public float Amplitude { get; set; }
+
+    public override int Read(float[] buffer, int offset, int sampleCount)
+    {
+        int sampleRate = WaveFormat.SampleRate;
+        for (int n = 0; n < sampleCount; n++)
+        {
+            buffer[n+offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+            sample++;
+            if (sample >= sampleRate) sample = 0;
+        }
+        return sampleCount;
+    }
+}
+
+    
     /// <summary>
     /// Interaktionslogik für MainWindow.xaml
     /// </summary>
@@ -54,40 +116,23 @@ namespace SoftwareprojektTheremin
             blobConfig.EnableColorMapping(true);
             blobConfig.ApplyChanges();
             blobData = blobModule.CreateOutput();
-
-
+            
+            //Audio
+            WaveOut waveOut;
+            var sineWaveProvider = new SineWaveProvider32();
+            sineWaveProvider.SetWaveFormat(16000, 1);
+            sineWaveProvider.Frequency(1000);
+            sineWaveProvider.Amplitude(0);
+            waveOut = new WaveOut();
+            waveOut.Init(sineWaveProvider);
+            
 
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
             update.Start();
-
-            ton = new Thread(delegate () { gen(frequency, volume); });
-            ton.Start();
         }
 
-        public static void gen(int freq, float volume)
-        {
-            // keine Tonausgabe, falls Freuqenz kleiner als 37
-            if (freq< 37) { }
-            else
-            {
-                WaveOut _waveOutGene = new WaveOut();
-                SignalGenerator wg = new SignalGenerator();
-                wg.Type = SignalGeneratorType.Sin;
-                wg.Frequency = freq;
-                _waveOutGene.Volume = volume;
 
-                _waveOutGene.Init(wg);
-
-                //solange Ton ausgeben bis Thread beendet wird
-                while (true)
-                {
-                    _waveOutGene.Play();
-                }
-                //ToDo
-                _waveOutGene.Dispose();
-            }
-        }
 
         private void Update()
         {
@@ -143,9 +188,8 @@ namespace SoftwareprojektTheremin
                 {
                     volume = 0.5F;
                 }
-                ton.Abort();
-                ton = new Thread(delegate () { gen(frequency, volume); });
-                ton.Start();
+                sineWaveProvider.Frequency(frequency);
+                sineWaveProvider.Amplitude(volume);
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
