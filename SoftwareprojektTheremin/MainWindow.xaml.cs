@@ -12,40 +12,6 @@ using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
-    public abstract class WaveProvider32 : IWaveProvider
-{
-    private WaveFormat waveFormat;
-    
-    public WaveProvider32()
-        : this(44100, 1)
-    {
-    }
-
-    public WaveProvider32(int sampleRate, int channels)
-    {
-        SetWaveFormat(sampleRate, channels);
-    }
-
-    public void SetWaveFormat(int sampleRate, int channels)
-    {
-        this.waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
-    }
-
-    public int Read(byte[] buffer, int offset, int count)
-    {
-        WaveBuffer waveBuffer = new WaveBuffer(buffer);
-        int samplesRequired = count / 4;
-        int samplesRead = Read(waveBuffer.FloatBuffer, offset / 4, samplesRequired);
-        return samplesRead * 4;
-    }
-
-    public abstract int Read(float[] buffer, int offset, int sampleCount);
-
-    public WaveFormat WaveFormat
-    {
-        get { return waveFormat; }
-    }
-}
     
     public class SineWaveProvider32 : WaveProvider32
 {
@@ -54,7 +20,7 @@ namespace SoftwareprojektTheremin
     public SineWaveProvider32()
     {
         Frequency = 1000;
-        Amplitude = 0.25f; // let's not hurt our ears            
+        Amplitude = 0.25f;            
     }
 
     public float Frequency { get; set; }
@@ -93,7 +59,8 @@ namespace SoftwareprojektTheremin
         private int trackingDistance = 1000;
         private int frequency = 35;
         private float volume = 0.5F;
-        private Thread ton;
+      //  private Thread ton;
+        private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
         public MainWindow()
         {
@@ -119,13 +86,12 @@ namespace SoftwareprojektTheremin
             
             //Audio
             WaveOut waveOut;
-            var sineWaveProvider = new SineWaveProvider32();
             sineWaveProvider.SetWaveFormat(16000, 1);
-            sineWaveProvider.Frequency(1000);
-            sineWaveProvider.Amplitude(0);
+            sineWaveProvider.Frequency = 1000;
+            sineWaveProvider.Amplitude = 0;
             waveOut = new WaveOut();
             waveOut.Init(sineWaveProvider);
-            
+            waveOut.Play();
 
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
@@ -188,8 +154,8 @@ namespace SoftwareprojektTheremin
                 {
                     volume = 0.5F;
                 }
-                sineWaveProvider.Frequency(frequency);
-                sineWaveProvider.Amplitude(volume);
+                sineWaveProvider.Frequency = frequency;
+                sineWaveProvider.Amplitude = volume;
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
