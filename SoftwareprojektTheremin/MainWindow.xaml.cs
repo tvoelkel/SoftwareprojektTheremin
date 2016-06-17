@@ -5,6 +5,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using NAudio.Wave;
+using NAudio.Dsp;
 
 namespace SoftwareprojektTheremin
 {
@@ -19,6 +20,7 @@ namespace SoftwareprojektTheremin
             Amplitude = 0.25f;
         }
 
+		//private BiQuadFilter AudioFilter = BiQuadFilter.SetHighPassFilter(16000,100,1);
         public float Frequency { get; set; }
         public float Amplitude { get; set; }
 
@@ -28,6 +30,15 @@ namespace SoftwareprojektTheremin
             for (int n = 0; n < sampleCount; n++)
             {
                 buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+				//buffer[n + offset] = AudioFilter.Transform(buffer[n + offset]);
+				if (offset >= 2) {
+					float d1 = buffer [n + offset - 2] - buffer [n + offset - 1];
+					//d1 *= d1 > 0 ? 1 : -1;
+					float d2 = buffer [n + offset - 1] - buffer [n + offset];
+					//d2 *= d2 > 0 ? 1 : -1;
+					if (d2 >= 5 * d1)
+						buffer [n + offset] -= d2 / 2;
+				}
                 sample++;
                 if (sample >= sampleRate) sample = 0;
             }
@@ -64,6 +75,7 @@ namespace SoftwareprojektTheremin
         //  private Thread ton;
         private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
+
         public MainWindow()
         {
             InitializeComponent();
@@ -92,7 +104,8 @@ namespace SoftwareprojektTheremin
             sineWaveProvider.Frequency = 1000;
             sineWaveProvider.Amplitude = 0;
             waveOut = new WaveOut();
-            waveOut.Init(sineWaveProvider);
+			AudioFilter.
+			waveOut.Init(AudioFilter);
             waveOut.Play();
 
             // Start Update thread
