@@ -4,25 +4,55 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using NAudio.Wave.SampleProviders;
-using NAudio.Wave.WaveFormats;
-using System.Diagnostics;
-using NAudio;
 using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
+
+    public class SineWaveProvider32 : WaveProvider32
+    {
+        int sample;
+
+        public SineWaveProvider32()
+        {
+            Frequency = 1000;
+            Amplitude = 0.25f;
+        }
+
+        public float Frequency { get; set; }
+        public float Amplitude { get; set; }
+
+        public override int Read(float[] buffer, int offset, int sampleCount)
+        {
+            int sampleRate = WaveFormat.SampleRate;
+            for (int n = 0; n < sampleCount; n++)
+            {
+                buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+                sample++;
+                if (sample >= sampleRate) sample = 0;
+            }
+            return sampleCount;
+        }
+    }
+
+
     /// <summary>
     /// Interaktionslogik für MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
-        enum coordinates{
-            LEFT = 0, RIGHT = 1, X = 0, Y = 1
-        };
+        enum hand : Int32
+        {
+            LEFT = 0, RIGHT = 1
+        }
+        enum cord : Int32
+        {
+            X = 0, Y = 1
+        }
         private PXCMSession session;
-        private float[,] blobCoordinates = new float[4,2] { { -1, -1 },{ -1, -1 },{ -1, -1 }, { -1, -1 } };
+        private float[,] blobCoordinates = new float[4, 2] { { -1, -1 }, { -1, -1 }, { -1, -1 }, { -1, -1 } };
         private PXCMSenseManager senseManager;
+        private PXCMPersonTrackingModule tracker;
         private Thread update;
         private PXCMBlobModule blobModule;
         private PXCMBlobConfiguration blobConfig;
@@ -31,7 +61,8 @@ namespace SoftwareprojektTheremin
         private int trackingDistance = 1000;
         private int frequency = 35;
         private float volume = 0.5F;
-        private Thread ton;
+        //  private Thread ton;
+        private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
         public MainWindow()
         {
@@ -55,39 +86,21 @@ namespace SoftwareprojektTheremin
             blobConfig.ApplyChanges();
             blobData = blobModule.CreateOutput();
 
-
+            //Audio
+            WaveOut waveOut;
+            sineWaveProvider.SetWaveFormat(16000, 1);
+            sineWaveProvider.Frequency = 1000;
+            sineWaveProvider.Amplitude = 0;
+            waveOut = new WaveOut();
+            waveOut.Init(sineWaveProvider);
+            waveOut.Play();
 
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
             update.Start();
-
-            ton = new Thread(delegate () { gen(frequency, volume); });
-            ton.Start();
         }
 
-        public static void gen(int freq, float volume)
-        {
-            // keine Tonausgabe, falls Freuqenz kleiner als 37
-            if (freq< 37) { }
-            else
-            {
-                WaveOut _waveOutGene = new WaveOut();
-                SignalGenerator wg = new SignalGenerator();
-                wg.Type = SignalGeneratorType.Sin;
-                wg.Frequency = freq;
-                _waveOutGene.Volume = volume;
 
-                _waveOutGene.Init(wg);
-
-                //solange Ton ausgeben bis Thread beendet wird
-                while (true)
-                {
-                    _waveOutGene.Play();
-                }
-                //ToDo
-                _waveOutGene.Dispose();
-            }
-        }
 
         private void Update()
         {
@@ -95,6 +108,7 @@ namespace SoftwareprojektTheremin
             while (senseManager.AcquireFrame(true) >= pxcmStatus.PXCM_STATUS_NO_ERROR)
             {
                 PXCMCapture.Sample sample = senseManager.QuerySample();
+
                 Bitmap colorBitmap;
                 PXCMImage.ImageData colorData;
                 blobData.Update();
@@ -109,43 +123,44 @@ namespace SoftwareprojektTheremin
                     senseManager.ReleaseFrame();
 
                    if(trackingDistance > 3000)
-                   {
                        trackingDistance = 600;
                    }
+                   {
                 }
                 */
 
-                for (int i = 0; i<2; i++)
+                for (int i = 0; i < 2; i++)
                 {
                     blobData.QueryBlobByAccessOrder(i, PXCMBlobData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, out blobList[i]);
                 }
                 if (blobData.QueryNumberOfBlobs() == 2)
                 {
-                    if(blobCoordinates[3, (int)coordinates.Y] == -1) {
+                    if (blobCoordinates[3, (int)cord.Y] == -1)
+                    {
                         //smoothing
                     }
                     if (blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x > blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x)
                     {
-                        blobCoordinates[(int)coordinates.LEFT,(int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
                     }
                     else
                     {
-                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
                     }
                 }
 
                 // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
-                frequency = (int)coordinates.LEFT;
-                volume = (float)coordinates.RIGHT / 100;
-                                if ((volume > 1) || (volume <= 0))
-                {
-                    volume = 0.5F;
-                }
-                ton.Abort();
-                ton = new Thread(delegate () { gen(frequency, volume); });
-                ton.Start();
+                frequency = (int)(blobCoordinates[(int)hand.LEFT, (int)cord.Y] * 1.8);
+                volume = (500 - blobCoordinates[(int)hand.RIGHT, (int)cord.Y]) / 500;
+
+                sineWaveProvider.Frequency = frequency;
+                sineWaveProvider.Amplitude = volume;
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
@@ -171,8 +186,8 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
-                    labelR.Content = blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y];
-                    labelL.Content = blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y];
+                    labelR.Content = blobCoordinates[(int)hand.RIGHT, (int)cord.Y];
+                    labelL.Content = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
                 }));
             }
         }
@@ -190,7 +205,10 @@ namespace SoftwareprojektTheremin
                     {
                         using (var graphics = Graphics.FromImage(bitmap))
                         {
-                            graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x-50, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
+                            //graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
+                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.LEFT, (int)cord.X] - 50, blobCoordinates[(int)hand.LEFT, (int)cord.Y], 5, 5);
+                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.RIGHT, (int)cord.X] - 50, blobCoordinates[(int)hand.RIGHT, (int)cord.Y], 5, 5);
+
                         }
                     }
                 }
