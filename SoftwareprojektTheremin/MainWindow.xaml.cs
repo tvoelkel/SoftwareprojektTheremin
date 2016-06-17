@@ -4,29 +4,65 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using NAudio.Wave;
 
 namespace SoftwareprojektTheremin
 {
+
+    public class SineWaveProvider32 : WaveProvider32
+    {
+        int sample;
+
+        public SineWaveProvider32()
+        {
+            Frequency = 1000;
+            Amplitude = 0.25f;
+        }
+
+        public float Frequency { get; set; }
+        public float Amplitude { get; set; }
+
+        public override int Read(float[] buffer, int offset, int sampleCount)
+        {
+            int sampleRate = WaveFormat.SampleRate;
+            for (int n = 0; n < sampleCount; n++)
+            {
+                buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+                sample++;
+                if (sample >= sampleRate) sample = 0;
+            }
+            return sampleCount;
+        }
+    }
+
+
     /// <summary>
     /// Interaktionslogik für MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
-        enum coordinates: int{
-            LEFT = 0, RIGHT = 1, X = 0, Y = 1
-        };
-        private static bool isPlaying = false;
+        enum hand : Int32
+        {
+            LEFT = 0, RIGHT = 1
+        }
+        enum cord : Int32
+        {
+            X = 0, Y = 1
+        }
         private PXCMSession session;
-        private float[,] blobCoordinates = new float[4,2] { { -1, -1 },{ -1, -1 },{ -1, -1 }, { -1, -1 } };
+        private float[,] blobCoordinates = new float[4, 2] { { -1, -1 }, { -1, -1 }, { -1, -1 }, { -1, -1 } };
         private PXCMSenseManager senseManager;
+        private PXCMPersonTrackingModule tracker;
         private Thread update;
         private PXCMBlobModule blobModule;
         private PXCMBlobConfiguration blobConfig;
         private PXCMBlobData blobData;
         private PXCMBlobData.IBlob[] blobList = new PXCMBlobData.IBlob[2];
         private int trackingDistance = 1000;
-        private static UInt32 frequency;
-        private static UInt32 volume;
+        private int frequency = 35;
+        private float volume = 0.5F;
+        //  private Thread ton;
+        private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
         public MainWindow()
         {
@@ -50,14 +86,21 @@ namespace SoftwareprojektTheremin
             blobConfig.ApplyChanges();
             blobData = blobModule.CreateOutput();
 
-
+            //Audio
+            WaveOut waveOut;
+            sineWaveProvider.SetWaveFormat(16000, 1);
+            sineWaveProvider.Frequency = 1000;
+            sineWaveProvider.Amplitude = 0;
+            waveOut = new WaveOut();
+            waveOut.Init(sineWaveProvider);
+            waveOut.Play();
 
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
             update.Start();
-
-
         }
+
+
 
         private void Update()
         {
@@ -65,6 +108,7 @@ namespace SoftwareprojektTheremin
             while (senseManager.AcquireFrame(true) >= pxcmStatus.PXCM_STATUS_NO_ERROR)
             {
                 PXCMCapture.Sample sample = senseManager.QuerySample();
+
                 Bitmap colorBitmap;
                 PXCMImage.ImageData colorData;
                 blobData.Update();
@@ -79,32 +123,44 @@ namespace SoftwareprojektTheremin
                     senseManager.ReleaseFrame();
 
                    if(trackingDistance > 3000)
-                   {
                        trackingDistance = 600;
                    }
+                   {
                 }
                 */
 
-                for (int i = 0; i<2; i++)
+                for (int i = 0; i < 2; i++)
                 {
                     blobData.QueryBlobByAccessOrder(i, PXCMBlobData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, out blobList[i]);
                 }
                 if (blobData.QueryNumberOfBlobs() == 2)
                 {
-                    if(blobCoordinates[3, (int)coordinates.Y] == -1) {
+                    if (blobCoordinates[3, (int)cord.Y] == -1)
+                    {
                         //smoothing
                     }
                     if (blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x > blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x)
                     {
-                        blobCoordinates[(int)coordinates.LEFT,(int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
                     }
                     else
                     {
-                        blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
                     }
                 }
+
+                // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
+                frequency = (int)(blobCoordinates[(int)hand.LEFT, (int)cord.Y] * 1.8);
+                volume = (500 - blobCoordinates[(int)hand.RIGHT, (int)cord.Y]) / 500;
+
+                sineWaveProvider.Frequency = frequency;
+                sineWaveProvider.Amplitude = volume;
 
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
@@ -113,15 +169,6 @@ namespace SoftwareprojektTheremin
                 // Update UI
                 Render(colorBitmap);
 
-                //Play Sound
-                frequency = (uint)(500 - blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y]) * 2;
-                volume = (uint)(500- blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y]) * 42;
-                if (!isPlaying)
-                {
-                    PlaySound();
-                }
-           
-                
                 // Release frame
                 colorBitmap.Dispose();
                 sample.color.ReleaseAccess(colorData);
@@ -139,8 +186,8 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
-                    labelR.Content = blobCoordinates[(int)coordinates.RIGHT, (int)coordinates.Y];
-                    labelL.Content = blobCoordinates[(int)coordinates.LEFT, (int)coordinates.Y];
+                    labelR.Content = blobCoordinates[(int)hand.RIGHT, (int)cord.Y];
+                    labelL.Content = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
                 }));
             }
         }
@@ -158,7 +205,10 @@ namespace SoftwareprojektTheremin
                     {
                         using (var graphics = Graphics.FromImage(bitmap))
                         {
-                            graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x-50, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
+                            //graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
+                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.LEFT, (int)cord.X] - 50, blobCoordinates[(int)hand.LEFT, (int)cord.Y], 5, 5);
+                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.RIGHT, (int)cord.X] - 50, blobCoordinates[(int)hand.RIGHT, (int)cord.Y], 5, 5);
+
                         }
                     }
                 }
@@ -186,58 +236,6 @@ namespace SoftwareprojektTheremin
         {
             ShutDown();
             this.Close();
-        }
-
-        private static void PlaySound()
-        {
-            var mStrm = new MemoryStream();
-            BinaryWriter writer = new BinaryWriter(mStrm);
-            isPlaying = true;
-
-            const double TAU = 2 * Math.PI;
-            int formatChunkSize = 16;
-            int headerSize = 8;
-            short formatType = 1;
-            short tracks = 1;
-            int samplesPerSecond = 44100;
-            short bitsPerSample = 16;
-            short frameSize = (short)(tracks * ((bitsPerSample + 7) / 8));
-            int bytesPerSecond = samplesPerSecond * frameSize;
-            int waveSize = 4;
-            int samples = (int)((decimal)samplesPerSecond * 20000 / 1000);
-            int dataChunkSize = samples * frameSize;
-            int fileSize = waveSize + headerSize + formatChunkSize + headerSize + dataChunkSize;
-            // var encoding = new System.Text.UTF8Encoding();
-            writer.Write(0x46464952); // = encoding.GetBytes("RIFF")
-            writer.Write(fileSize);
-            writer.Write(0x45564157); // = encoding.GetBytes("WAVE")
-            writer.Write(0x20746D66); // = encoding.GetBytes("fmt ")
-            writer.Write(formatChunkSize);
-            writer.Write(formatType);
-            writer.Write(tracks);
-            writer.Write(samplesPerSecond);
-            writer.Write(bytesPerSecond);
-            writer.Write(frameSize);
-            writer.Write(bitsPerSample);
-            writer.Write(0x61746164); // = encoding.GetBytes("data")
-            writer.Write(dataChunkSize);
-            {
-                //double theta = frequency * TAU / (double)samplesPerSecond;
-                // 'volume' is UInt16 with range 0 thru Uint16.MaxValue ( = 65 535)
-                // we need 'amp' to have the range of 0 thru Int16.MaxValue ( = 32 767)
-                //double amp = volume >> 2; // so we simply set amp = volume / 2
-                for (int step = 0; step < samples; step++)
-                {
-                    short s = (short)((volume>>2) * Math.Sin((frequency * TAU/(double)samplesPerSecond) * (double)step));
-                    writer.Write(s);
-                }
-            }
-
-            mStrm.Seek(0, SeekOrigin.Begin);
-            new System.Media.SoundPlayer(mStrm).Play();
-            isPlaying = false;
-            writer.Close();
-            mStrm.Close();
         }
 
         private void ShutDown()
