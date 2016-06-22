@@ -28,6 +28,10 @@ namespace SoftwareprojektTheremin
         public float Amplitude;
         private bool ActualPositionSineWavePositive, PreviousPositionSineWavePositive;
 
+		//private BiQuadFilter AudioFilter = BiQuadFilter.SetHighPassFilter(16000,100,1);
+        public float Frequency { get; set; }
+        public float Amplitude { get; set; }
+
         public override int Read(float[] buffer, int offset, int sampleCount)
         {
             int sampleRate = WaveFormat.SampleRate;
@@ -38,6 +42,17 @@ namespace SoftwareprojektTheremin
                 buffer[n + offset] = (float)(amp * Math.Sin((2 * Math.PI * sample * freq) / sampleRate));
                 PreviousPositionSineWavePositive = ActualPositionSineWavePositive;
                 ActualPositionSineWavePositive = buffer[n + offset] >= 0;
+
+                buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+				//buffer[n + offset] = AudioFilter.Transform(buffer[n + offset]);
+				if (offset >= 2) {
+					float d1 = buffer [n + offset - 2] - buffer [n + offset - 1];
+					//d1 *= d1 > 0 ? 1 : -1;
+					float d2 = buffer [n + offset - 1] - buffer [n + offset];
+					//d2 *= d2 > 0 ? 1 : -1;
+					if (d2 >= 5 * d1)
+						buffer [n + offset] -= d2 / 2;
+				}
                 sample++;
                 if (sample >= sampleRate) sample = 0;
                 if (PreviousPositionSineWavePositive == false && ActualPositionSineWavePositive == true)
@@ -85,6 +100,7 @@ namespace SoftwareprojektTheremin
         //  private Thread ton;
         private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
+
         public MainWindow()
         {
             InitializeComponent();
@@ -113,7 +129,8 @@ namespace SoftwareprojektTheremin
             sineWaveProvider.Frequency = 1000;
             sineWaveProvider.Amplitude = 0;
             waveOut = new WaveOut();
-            waveOut.Init(sineWaveProvider);
+			AudioFilter.
+			waveOut.Init(AudioFilter);
             waveOut.Play();
 
             // Start Update thread
