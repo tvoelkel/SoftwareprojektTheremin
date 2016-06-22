@@ -35,6 +35,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Emgu.CV.World">
+      <HintPath>..\..\..\..\..\..\..\Emgu\emgucv-windesktop 3.1.0.2282\bin\Emgu.CV.World.dll</HintPath>
+    </Reference>
     <Reference Include="libpxcclr.cs">
       <HintPath>..\..\..\..\..\..\..\Program Files (x86)\Intel\RSSDK\bin\x64\libpxcclr.cs.dll</HintPath>
     </Reference>

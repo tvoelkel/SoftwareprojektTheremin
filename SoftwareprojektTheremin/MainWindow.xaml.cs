@@ -5,6 +5,9 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using NAudio.Wave;
+using NAudio.Dsp;
+using Emgu.CV;
+using Emgu.CV.Structure;
 
 namespace SoftwareprojektTheremin
 {
@@ -17,19 +20,32 @@ namespace SoftwareprojektTheremin
         {
             Frequency = 1000;
             Amplitude = 0.25f;
+            ActualPositionSineWavePositive = false;
+            PreviousPositionSineWavePositive = false;
         }
 
-        public float Frequency { get; set; }
-        public float Amplitude { get; set; }
+        public float Frequency;
+        public float Amplitude;
+        private bool ActualPositionSineWavePositive, PreviousPositionSineWavePositive;
 
         public override int Read(float[] buffer, int offset, int sampleCount)
         {
             int sampleRate = WaveFormat.SampleRate;
+            float freq = Frequency;
+            float amp = Amplitude;
             for (int n = 0; n < sampleCount; n++)
             {
-                buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
+                buffer[n + offset] = (float)(amp * Math.Sin((2 * Math.PI * sample * freq) / sampleRate));
+                PreviousPositionSineWavePositive = ActualPositionSineWavePositive;
+                ActualPositionSineWavePositive = buffer[n + offset] >= 0;
                 sample++;
                 if (sample >= sampleRate) sample = 0;
+                if (PreviousPositionSineWavePositive == false && ActualPositionSineWavePositive == true)
+                {
+                    freq = Frequency;
+                    amp = Amplitude;
+                }
+                //@Note Wenn das nicht funktioniert, NumberOfBuffers und DesiredLatency von Waveout anpassen
             }
             return sampleCount;
         }
@@ -61,6 +77,11 @@ namespace SoftwareprojektTheremin
         private int trackingDistance = 1000;
         private int frequency = 35;
         private float volume = 0.5F;
+        Mat img, template, result;
+
+            
+            
+            
         //  private Thread ton;
         private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
@@ -167,6 +188,9 @@ namespace SoftwareprojektTheremin
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
 
                 // Update UI
+                //colorBitmap.Save("bitmap.bmp");
+                //img = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.AnyColor);
+                //MatchingMethod();
                 Render(colorBitmap);
 
                 // Release frame
@@ -248,6 +272,45 @@ namespace SoftwareprojektTheremin
             blobData.Dispose();
             senseManager.Dispose();
             session.Dispose();
+        }
+
+        void MatchingMethod()
+        {
+            /// Source image to display
+            Mat img_display = null;
+            img.CopyTo(img_display);
+
+            /// Create the result matrix
+            int result_cols = img.Cols - template.Cols + 1;
+            int result_rows = img.Rows - template.Rows + 1;
+
+            result.Create(result_rows, result_cols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
+
+            /// Do the Matching and Normalize
+            CvInvoke.MatchTemplate(img, template, result, Emgu.CV.CvEnum.TemplateMatchingType.CcoeffNormed);
+            CvInvoke.Normalize(result, result, 0, 1, Emgu.CV.CvEnum.NormType.MinMax, Emgu.CV.CvEnum.DepthType.Default, null);
+
+            /// Localizing the best match with minMaxLoc
+            double minVal = 0; double maxVal = 0;
+            System.Drawing.Point minLoc = new System.Drawing.Point(0,0), maxLoc = new System.Drawing.Point(0, 0), matchLoc=new System.Drawing.Point(0, 0);
+
+            CvInvoke.MinMaxLoc(result, ref minVal, ref maxVal, ref minLoc, ref maxLoc, null);
+
+            /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
+            /*if (match_method == CV_TM_SQDIFF || match_method == CV_TM_SQDIFF_NORMED)
+            { matchLoc = minLoc; }
+            else
+            { */
+            matchLoc = maxLoc; 
+
+            /// Show me what you got
+            CvInvoke.Rectangle(img_display, matchLoc, new System.Drawing.Point(matchLoc.X + template.Cols, matchLoc.Y + template.Rows), 
+            CvInvoke.Rectangle(result, matchLoc, new System.Drawing.Point(matchLoc.X + template.Cols, matchLoc.Y + template.Rows), CvInvoke.Scalar::all(0), 2, 8, 0);
+
+            //CvInvoke.Imshow(image_window, img_display);
+            //CvInvoke.Imshow(result_window, result);
+
+            return;
         }
     }
 }
