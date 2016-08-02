@@ -45,7 +45,6 @@ namespace SoftwareprojektTheremin
                 buffer[n + offset] = (float)(amp * Math.Sin((2 * Math.PI * sample * freq) / sampleRate));
                 PreviousPositionSineWavePositive = ActualPositionSineWavePositive;
                 ActualPositionSineWavePositive = buffer[n + offset] >= 0;
-
                 sample++;
                 if (sample >= sampleRate) sample = 0;
                 if (PreviousPositionSineWavePositive == false && ActualPositionSineWavePositive == true)
