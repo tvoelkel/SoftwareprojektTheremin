@@ -8,6 +8,7 @@ using NAudio.Wave;
 using NAudio.Dsp;
 using Emgu.CV;
 using Emgu.CV.Structure;
+using System.Drawing.Imaging;
 
 namespace SoftwareprojektTheremin
 {
@@ -20,17 +21,19 @@ namespace SoftwareprojektTheremin
         {
             Frequency = 1000;
             Amplitude = 0.25f;
+            freq = Frequency;
+            amp = Amplitude;
             ActualPositionSineWavePositive = false;
             PreviousPositionSineWavePositive = false;
         }
 
         public float Frequency;
         public float Amplitude;
+        private float freq;
+        private float amp;
         private bool ActualPositionSineWavePositive, PreviousPositionSineWavePositive;
 
 		//private BiQuadFilter AudioFilter = BiQuadFilter.SetHighPassFilter(16000,100,1);
-        public float Frequency { get; set; }
-        public float Amplitude { get; set; }
 
         public override int Read(float[] buffer, int offset, int sampleCount)
         {
@@ -43,16 +46,6 @@ namespace SoftwareprojektTheremin
                 PreviousPositionSineWavePositive = ActualPositionSineWavePositive;
                 ActualPositionSineWavePositive = buffer[n + offset] >= 0;
 
-                buffer[n + offset] = (float)(Amplitude * Math.Sin((2 * Math.PI * sample * Frequency) / sampleRate));
-				//buffer[n + offset] = AudioFilter.Transform(buffer[n + offset]);
-				if (offset >= 2) {
-					float d1 = buffer [n + offset - 2] - buffer [n + offset - 1];
-					//d1 *= d1 > 0 ? 1 : -1;
-					float d2 = buffer [n + offset - 1] - buffer [n + offset];
-					//d2 *= d2 > 0 ? 1 : -1;
-					if (d2 >= 5 * d1)
-						buffer [n + offset] -= d2 / 2;
-				}
                 sample++;
                 if (sample >= sampleRate) sample = 0;
                 if (PreviousPositionSineWavePositive == false && ActualPositionSineWavePositive == true)
@@ -70,7 +63,7 @@ namespace SoftwareprojektTheremin
     /// <summary>
     /// Interaktionslogik für MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : System.Windows.Window
     {
         enum hand : Int32
         {
@@ -81,9 +74,8 @@ namespace SoftwareprojektTheremin
             X = 0, Y = 1
         }
         private PXCMSession session;
-        private float[,] blobCoordinates = new float[4, 2] { { -1, -1 }, { -1, -1 }, { -1, -1 }, { -1, -1 } };
+        private float[,] blobCoordinates = new float[2, 2] { { 0, 0 }, { 0, 0 }};
         private PXCMSenseManager senseManager;
-        private PXCMPersonTrackingModule tracker;
         private Thread update;
         private PXCMBlobModule blobModule;
         private PXCMBlobConfiguration blobConfig;
@@ -92,11 +84,13 @@ namespace SoftwareprojektTheremin
         private int trackingDistance = 1000;
         private int frequency = 35;
         private float volume = 0.5F;
-        Mat img, template, result;
+        Bitmap colorBitmap, checkBitmap;
+        DateTime startTime;
+        bool templatesSet = false;
 
-            
-            
-            
+
+
+
         //  private Thread ton;
         private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
 
@@ -129,10 +123,10 @@ namespace SoftwareprojektTheremin
             sineWaveProvider.Frequency = 1000;
             sineWaveProvider.Amplitude = 0;
             waveOut = new WaveOut();
-			AudioFilter.
-			waveOut.Init(AudioFilter);
+            waveOut.Init(sineWaveProvider);
             waveOut.Play();
 
+            startTime = DateTime.Now;
             // Start Update thread
             update = new Thread(new ThreadStart(Update));
             update.Start();
@@ -147,7 +141,6 @@ namespace SoftwareprojektTheremin
             {
                 PXCMCapture.Sample sample = senseManager.QuerySample();
 
-                Bitmap colorBitmap;
                 PXCMImage.ImageData colorData;
                 blobData.Update();
 
@@ -166,7 +159,7 @@ namespace SoftwareprojektTheremin
                    {
                 }
                 */
-
+                /*
                 for (int i = 0; i < 2; i++)
                 {
                     blobData.QueryBlobByAccessOrder(i, PXCMBlobData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, out blobList[i]);
@@ -192,7 +185,7 @@ namespace SoftwareprojektTheremin
                         blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
                     }
                 }
-
+                */
                 // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
                 frequency = (int)(blobCoordinates[(int)hand.LEFT, (int)cord.Y] * 1.8);
                 volume = (500 - blobCoordinates[(int)hand.RIGHT, (int)cord.Y]) / 500;
@@ -203,11 +196,47 @@ namespace SoftwareprojektTheremin
                 // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
+                checkBitmap = new Bitmap(colorBitmap);
 
-                // Update UI
-                //colorBitmap.Save("bitmap.bmp");
-                //img = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.AnyColor);
-                //MatchingMethod();
+                if ((DateTime.Now.Ticks - startTime.Ticks) < 50000000)
+                {
+                    using (var graphics = Graphics.FromImage(colorBitmap))
+                    {
+                        System.Drawing.Pen fancyPen = new System.Drawing.Pen(System.Drawing.Color.Cyan, 5);
+                        graphics.DrawRectangle(fancyPen, colorBitmap.Width / 5, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                        graphics.DrawRectangle(fancyPen, (colorBitmap.Width / 5) * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    }
+                }
+                else if (!templatesSet)
+                {
+                    Bitmap template1 = new Bitmap(colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Bitmap template2 = new Bitmap(colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Rectangle rect1 = new Rectangle(colorBitmap.Width / 5, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Rectangle rect2 = new Rectangle((colorBitmap.Width / 5) * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Rectangle dest = new Rectangle(0, 0, template1.Width, template1.Height);
+                    using (var graphics = Graphics.FromImage(template1))
+                    {
+                        graphics.DrawImage(colorBitmap, dest, rect1, GraphicsUnit.Pixel);
+                    }
+                    using (var graphics = Graphics.FromImage(template2))
+                    {
+                        graphics.DrawImage(colorBitmap, dest, rect2, GraphicsUnit.Pixel);
+                    }
+                    template1.Save("hand1.bmp");
+                    template2.Save("hand2.bmp");
+                    templatesSet = true;
+                }
+                else {
+                    // Update UI
+                    colorBitmap.Save("bitmap.bmp", ImageFormat.Bmp);
+                    //Mat img = new Mat("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.AnyColor);
+                    Mat img = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    Mat template = CvInvoke.Imread("hand1.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(img, template, false);
+                    template = CvInvoke.Imread("hand2.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    Mat img2 = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(img2, template, true);
+                }
                 Render(colorBitmap);
 
                 // Release frame
@@ -247,9 +276,8 @@ namespace SoftwareprojektTheremin
                         using (var graphics = Graphics.FromImage(bitmap))
                         {
                             //graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
-                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.LEFT, (int)cord.X] - 50, blobCoordinates[(int)hand.LEFT, (int)cord.Y], 5, 5);
-                            graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.RIGHT, (int)cord.X] - 50, blobCoordinates[(int)hand.RIGHT, (int)cord.Y], 5, 5);
-
+                            //graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.LEFT, (int)cord.X] - 50, blobCoordinates[(int)hand.LEFT, (int)cord.Y], 5, 5);
+                            //graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.RIGHT, (int)cord.X] - 50, blobCoordinates[(int)hand.RIGHT, (int)cord.Y], 5, 5);
                         }
                     }
                 }
@@ -291,16 +319,16 @@ namespace SoftwareprojektTheremin
             session.Dispose();
         }
 
-        void MatchingMethod()
+        void templateMatch(Mat img, Mat template, bool secondIteration)
         {
             /// Source image to display
-            Mat img_display = null;
-            img.CopyTo(img_display);
-
+            /*Mat img_display = null;
+            img.CopyTo(img_display);*/
+            
             /// Create the result matrix
             int result_cols = img.Cols - template.Cols + 1;
             int result_rows = img.Rows - template.Rows + 1;
-
+            Mat result = new Mat();
             result.Create(result_rows, result_cols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
 
             /// Do the Matching and Normalize
@@ -318,16 +346,45 @@ namespace SoftwareprojektTheremin
             { matchLoc = minLoc; }
             else
             { */
-            matchLoc = maxLoc; 
 
-            /// Show me what you got
-            CvInvoke.Rectangle(img_display, matchLoc, new System.Drawing.Point(matchLoc.X + template.Cols, matchLoc.Y + template.Rows), 
-            CvInvoke.Rectangle(result, matchLoc, new System.Drawing.Point(matchLoc.X + template.Cols, matchLoc.Y + template.Rows), CvInvoke.Scalar::all(0), 2, 8, 0);
+            matchLoc = maxLoc;
+            if (!secondIteration)
+            {
+                blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X+template.Cols/2;
+                blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y+template.Rows/2;
+            }
+            else
+            {
+                if(matchLoc.X <= blobCoordinates[(int)hand.LEFT, (int)cord.X])
+                {
+                    blobCoordinates[(int)hand.RIGHT, (int)cord.X] = matchLoc.X + template.Cols / 2;
+                    blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
+                }
+                else
+                {
+                    blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobCoordinates[(int)hand.LEFT, (int)cord.X];
+                    blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
+                    blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X + template.Cols / 2;
+                    blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
+                }
+            }
+            
+            // Show me what you got
+            using (var graphics = Graphics.FromImage(colorBitmap))
+            {
+                System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
+                graphics.DrawRectangle(fancierPen, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+            }
 
-            //CvInvoke.Imshow(image_window, img_display);
-            //CvInvoke.Imshow(result_window, result);
-
-            return;
+            if (!secondIteration)
+            {
+                using (var graphics = Graphics.FromImage(checkBitmap))
+                {
+                    SolidBrush fancyBrush = new SolidBrush(Color.Black);
+                    graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                }
+                checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
+            }
         }
     }
 }
