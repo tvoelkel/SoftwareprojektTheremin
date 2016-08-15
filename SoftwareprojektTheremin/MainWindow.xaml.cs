@@ -7,247 +7,174 @@ using System.Windows.Media.Imaging;
 using NAudio.Wave;
 using NAudio.Dsp;
 using Emgu.CV;
-using Emgu.CV.Structure;
 using System.Drawing.Imaging;
 
 namespace SoftwareprojektTheremin
 {
-
-    public class SineWaveProvider32 : WaveProvider32
-    {
-        int sample;
-
-        public SineWaveProvider32()
-        {
-            Frequency = 1000;
-            Amplitude = 0.25f;
-            freq = Frequency;
-            amp = Amplitude;
-            ActualPositionSineWavePositive = false;
-            PreviousPositionSineWavePositive = false;
-        }
-
-        public float Frequency;
-        public float Amplitude;
-        private float freq;
-        private float amp;
-        private bool ActualPositionSineWavePositive, PreviousPositionSineWavePositive;
-
-		//private BiQuadFilter AudioFilter = BiQuadFilter.SetHighPassFilter(16000,100,1);
-
-        public override int Read(float[] buffer, int offset, int sampleCount)
-        {
-            int sampleRate = WaveFormat.SampleRate;
-            float freq = Frequency;
-            float amp = Amplitude;
-            for (int n = 0; n < sampleCount; n++)
-            {
-                buffer[n + offset] = (float)(amp * Math.Sin((2 * Math.PI * sample * freq) / sampleRate));
-                PreviousPositionSineWavePositive = ActualPositionSineWavePositive;
-                ActualPositionSineWavePositive = buffer[n + offset] >= 0;
-                sample++;
-                if (sample >= sampleRate) sample = 0;
-                if (PreviousPositionSineWavePositive == false && ActualPositionSineWavePositive == true)
-                {
-                    freq = Frequency;
-                    amp = Amplitude;
-                }
-                //@Note Wenn das nicht funktioniert, NumberOfBuffers und DesiredLatency von Waveout anpassen
-            }
-            return sampleCount;
-        }
-    }
-
-
-    /// <summary>
-    /// Interaktionslogik für MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : System.Windows.Window
     {
         enum hand : Int32
         {
             LEFT = 0, RIGHT = 1
         }
-        enum cord : Int32
+
+        enum coordinate : Int32
         {
             X = 0, Y = 1
         }
         private PXCMSession session;
-        private float[,] blobCoordinates = new float[2, 2] { { 0, 0 }, { 0, 0 }};
         private PXCMSenseManager senseManager;
         private Thread update;
-        private PXCMBlobModule blobModule;
-        private PXCMBlobConfiguration blobConfig;
-        private PXCMBlobData blobData;
-        private PXCMBlobData.IBlob[] blobList = new PXCMBlobData.IBlob[2];
-        private int trackingDistance = 1000;
-        private int frequency = 35;
-        private float volume = 0.5F;
-        Bitmap colorBitmap, checkBitmap;
-        DateTime startTime;
-        bool templatesSet = false;
-        Mat hand1 = null;
-        Mat hand2 = null;
-
-
-
-
-        //  private Thread ton;
-        private SineWaveProvider32 sineWaveProvider = new SineWaveProvider32();
-
+        private float[,] handCoordinates = new float[2, 2] { { 0, 0 }, { 0, 0 } };
+        private int heigth = 640, width = 480, fps = 30, scalingFactor = 4;
+        private DateTime startTime;
+        private Bitmap colorBitmap, checkBitmap;
+        private Mat hand1, hand2;
+        private Boolean templatesSet = false; //defines whether hand-templates are already set
 
         public MainWindow()
         {
             InitializeComponent();
 
-            // Configure RealSense session and SenseManager interface
+            //Configure RealSense session and SenseManager
             session = PXCMSession.CreateInstance();
             senseManager = session.CreateSenseManager();
-            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, 320, 240, 30);
-            senseManager.EnableBlob();
+            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, heigth, width, fps);    //Get color image stream
             senseManager.Init();
 
-            //Create blobModule from SenseManager
-            blobModule = senseManager.QueryBlob();
-            blobConfig = blobModule.CreateActiveConfiguration();
-            blobConfig.SetMaxBlobs(2);
-            blobConfig.SetMaxDistance(trackingDistance);
-            blobConfig.SetMaxObjectDepth(100);
-            blobConfig.SetMinPixelCount(400);
-            blobConfig.EnableColorMapping(true);
-            blobConfig.ApplyChanges();
-            blobData = blobModule.CreateOutput();
-
             //Audio
-            WaveOut waveOut;
-            sineWaveProvider.SetWaveFormat(16000, 1);
-            sineWaveProvider.Frequency = 1000;
-            sineWaveProvider.Amplitude = 0;
-            waveOut = new WaveOut();
-            waveOut.Init(sineWaveProvider);
-            waveOut.Play();
+            //ToDo
 
-            startTime = DateTime.Now;
-            // Start Update thread
+            startTime = DateTime.Now;   //Begin of template Initialization
             update = new Thread(new ThreadStart(Update));
-            update.Start();
         }
-
-
 
         private void Update()
         {
-            // Start AcquireFrame-ReleaseFrame loop
+            //Start Acquire/Release frame loop
             while (senseManager.AcquireFrame(true) >= pxcmStatus.PXCM_STATUS_NO_ERROR)
             {
                 PXCMCapture.Sample sample = senseManager.QuerySample();
-
                 PXCMImage.ImageData colorData;
-                blobData.Update();
 
-                /*while (blobData.QueryNumberOfBlobs() < 2)
-                {
-                    trackingDistance += 100;
-                    blobConfig.SetMaxDistance(trackingDistance);
-                    blobConfig.ApplyChanges();
-                    blobData.Update();
-                    
-                    senseManager.ReleaseFrame();
-
-                   if(trackingDistance > 3000)
-                       trackingDistance = 600;
-                   }
-                   {
-                }
-                */
-                /*
-                for (int i = 0; i < 2; i++)
-                {
-                    blobData.QueryBlobByAccessOrder(i, PXCMBlobData.AccessOrderType.ACCESS_ORDER_NEAR_TO_FAR, out blobList[i]);
-                }
-                if (blobData.QueryNumberOfBlobs() == 2)
-                {
-                    if (blobCoordinates[3, (int)cord.Y] == -1)
-                    {
-                        //smoothing
-                    }
-                    if (blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x > blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x)
-                    {
-                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
-                    }
-                    else
-                    {
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y;
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobList[0].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
-                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = blobList[1].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x;
-                    }
-                }
-                */
-                // Tonausgabe: aktuelle Tonausgabe beenden und neue beginnen
-                frequency = (int)(blobCoordinates[(int)hand.LEFT, (int)cord.Y] * 1.8);
-                volume = (500 - blobCoordinates[(int)hand.RIGHT, (int)cord.Y]) / 500;
-
-                sineWaveProvider.Frequency = frequency;
-                sineWaveProvider.Amplitude = volume;
-
-                // Get color image data
                 sample.color.AcquireAccess(PXCMImage.Access.ACCESS_READ, PXCMImage.PixelFormat.PIXEL_FORMAT_RGB32, out colorData);
                 colorBitmap = colorData.ToBitmap(0, sample.color.info.width, sample.color.info.height);
-                checkBitmap = new Bitmap(colorBitmap);
 
-                if ((DateTime.Now.Ticks - startTime.Ticks) < 50000000)
-                {
+                if ((DateTime.Now.Ticks - startTime.Ticks) < 70000000)   //Initialization phase
                     using (var graphics = Graphics.FromImage(colorBitmap))
                     {
-                        System.Drawing.Pen fancyPen = new System.Drawing.Pen(System.Drawing.Color.Cyan, 5);
+                        Pen fancyPen = new Pen(Color.Cyan, 4);
                         graphics.DrawRectangle(fancyPen, colorBitmap.Width / 5, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
-                        graphics.DrawRectangle(fancyPen, (colorBitmap.Width / 5) * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                        graphics.DrawRectangle(fancyPen, colorBitmap.Width / 5 * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
                     }
-                }
                 else if (!templatesSet)
                 {
+                    //set hand-templates if not already set
                     Bitmap template1 = new Bitmap(colorBitmap.Width / 5, colorBitmap.Height / 3);
-                    Bitmap template2 = new Bitmap(colorBitmap.Width / 5, colorBitmap.Height / 3);
-                    Rectangle rect1 = new Rectangle(colorBitmap.Width / 5, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
-                    Rectangle rect2 = new Rectangle((colorBitmap.Width / 5) * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Bitmap template2 = new Bitmap(template1);
+                    Rectangle rectHand1 = new Rectangle(colorBitmap.Width / 5, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
+                    Rectangle rectHand2 = new Rectangle((colorBitmap.Width / 5) * 3, colorBitmap.Height / 3, colorBitmap.Width / 5, colorBitmap.Height / 3);
                     Rectangle dest = new Rectangle(0, 0, template1.Width, template1.Height);
+
                     using (var graphics = Graphics.FromImage(template1))
                     {
-                        graphics.DrawImage(colorBitmap, dest, rect1, GraphicsUnit.Pixel);
+                        graphics.DrawImage(colorBitmap, dest, rectHand1, GraphicsUnit.Pixel);
                     }
-                    using (var graphics = Graphics.FromImage(template2))
+                    using (var graphics = Graphics.FromImage(template1))
                     {
-                        graphics.DrawImage(colorBitmap, dest, rect2, GraphicsUnit.Pixel);
+                        graphics.DrawImage(colorBitmap, dest, rectHand1, GraphicsUnit.Pixel);
                     }
-                    template1.Save("hand1.bmp");
+                    scale(template1, scalingFactor).Save("hand1.bmp");
+                    scale(template2, scalingFactor).Save("hand2.bmp");
                     hand1 = CvInvoke.Imread("hand1.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    template2.Save("hand2.bmp");
                     hand2 = CvInvoke.Imread("hand2.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+
                     templatesSet = true;
                 }
-                else {
-                    // Update UI
-                    colorBitmap.Save("bitmap.bmp", ImageFormat.Bmp);
-                    //Mat img = new Mat("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.AnyColor);
-                    Mat img = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    templateMatch(img, hand1, false);
-                    Mat img2 = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    templateMatch(img2, hand2, true);
+                else
+                {
+                    //Initializing Template Matching
+                    Bitmap colorBitmapScaled = new Bitmap(colorBitmap);
+                    scale(colorBitmapScaled, scalingFactor).Save("bitmap.bmp", ImageFormat.Bmp);
+                    checkBitmap = new Bitmap(colorBitmapScaled);
+                    Mat image = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(image, hand1, false);
+                    image = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(image, hand2, true);
                 }
-                Render(colorBitmap);
 
-                // Release frame
-                colorBitmap.Dispose();
-                sample.color.ReleaseAccess(colorData);
-                senseManager.ReleaseFrame();
+                //Audio Output (stop current output and start new one)
+                //ToDo
+
+                render(colorBitmap);
             }
         }
 
-        private void Render(Bitmap bitmap)
+        private Bitmap scale(Bitmap image, int factor)
+        {
+            Rectangle source = new Rectangle(0, 0, image.Width, image.Height);
+            Rectangle dest = new Rectangle(0, 0, image.Width / factor, image.Height / factor);
+            var graphics = Graphics.FromImage(image);
+
+            graphics.DrawImage(image, dest, source, GraphicsUnit.Pixel);
+
+            return image;
+        }
+
+        private void templateMatch(Mat image, Mat template, bool secondIteration)
+        {
+            //Create result matrix
+            int resultCols = image.Cols - template.Cols + 1;
+            int resultRows = image.Rows - template.Rows + 1;
+            Mat result = new Mat();
+            result.Create(resultRows, resultCols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
+
+            //Match template and normalize
+            CvInvoke.MatchTemplate(image, template, result, Emgu.CV.CvEnum.TemplateMatchingType.CcoeffNormed);
+            CvInvoke.Normalize(result, result, 0, 1, Emgu.CV.CvEnum.NormType.MinMax, Emgu.CV.CvEnum.DepthType.Default, null);
+
+            //Apply minMaxLoc to find best match
+            double minVal = 0; double maxVal = 0;
+            System.Drawing.Point minLoc = new System.Drawing.Point(0, 0), maxLoc = new System.Drawing.Point(0, 0), matchLoc = new System.Drawing.Point(0, 0);
+            CvInvoke.MinMaxLoc(result, ref minVal, ref maxVal, ref minLoc, ref maxLoc, null);
+
+            matchLoc = maxLoc;
+
+            //Update hand coordinate array
+            if (!secondIteration)
+            {
+                handCoordinates[(int)hand.LEFT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
+                handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
+            }
+            else
+            {
+                if (matchLoc.X * scalingFactor <= handCoordinates[(int)hand.LEFT, (int)coordinate.X])
+                {
+                    handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
+                    handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
+                }
+                else
+                {
+                    handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = handCoordinates[(int)hand.LEFT, (int)coordinate.X];
+                    handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
+                    handCoordinates[(int)hand.LEFT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
+                    handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
+                }
+            }
+
+            //create checkBitmap for second iteration (same bitmap, without the location of the first hand)
+            if (!secondIteration)
+            {
+                using (var graphics = Graphics.FromImage(checkBitmap))
+                {
+                    SolidBrush fancyBrush = new SolidBrush(Color.Pink);
+                    graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                }
+                checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
+            }
+        }
+
+        private void render(Bitmap bitmap)
         {
             BitmapImage bitmapImage = ConvertBitmap(bitmap);
 
@@ -257,8 +184,8 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
-                    labelR.Content = blobCoordinates[(int)hand.RIGHT, (int)cord.Y];
-                    labelL.Content = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
+                    labelR.Content = handCoordinates[(int)hand.RIGHT, (int)coordinate.Y];
+                    labelL.Content = handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
                 }));
             }
         }
@@ -266,21 +193,24 @@ namespace SoftwareprojektTheremin
         private BitmapImage ConvertBitmap(Bitmap bitmap)
         {
             BitmapImage bitmapImage = null;
-            System.Drawing.Pen fancyPen = new System.Drawing.Pen(System.Drawing.Color.Cyan, 5);
 
             if (bitmap != null)
             {
-                if (blobData.QueryNumberOfBlobs() == 2)
+                if(handCoordinates[(int)hand.RIGHT, (int)coordinate.X] != 0)
+                using (var graphics = Graphics.FromImage(bitmap))
                 {
-                    for (int i = 0; i < 2; i++)
-                    {
-                        using (var graphics = Graphics.FromImage(bitmap))
-                        {
-                            //graphics.DrawRectangle(fancyPen, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).x, blobList[i].QueryExtremityPoint(PXCMBlobData.ExtremityType.EXTREMITY_CENTER).y, 5, 5);
-                            //graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.LEFT, (int)cord.X] - 50, blobCoordinates[(int)hand.LEFT, (int)cord.Y], 5, 5);
-                            //graphics.DrawRectangle(fancyPen, blobCoordinates[(int)hand.RIGHT, (int)cord.X] - 50, blobCoordinates[(int)hand.RIGHT, (int)cord.Y], 5, 5);
-                        }
-                    }
+                    System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
+                    graphics.DrawRectangle(fancierPen,
+                        handCoordinates[(int)hand.RIGHT, (int)coordinate.X] - (hand1.Cols / 2 * scalingFactor),
+                        handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - (hand1.Rows / 2 * scalingFactor),
+                        hand1.Cols * scalingFactor,
+                        hand1.Rows * scalingFactor);
+
+                    graphics.DrawRectangle(fancierPen,
+                        handCoordinates[(int)hand.LEFT, (int)coordinate.X] - (hand2.Cols / 2 * scalingFactor),
+                        handCoordinates[(int)hand.LEFT, (int)coordinate.Y] - (hand2.Rows / 2 * scalingFactor),
+                        hand2.Cols * scalingFactor,
+                        hand2.Rows * scalingFactor);
                 }
                 bitmap.RotateFlip(RotateFlipType.Rotate180FlipY);
                 MemoryStream memoryStream = new MemoryStream();
@@ -293,7 +223,6 @@ namespace SoftwareprojektTheremin
                 bitmapImage.EndInit();
                 bitmapImage.Freeze();
             }
-
             return bitmapImage;
         }
 
@@ -314,91 +243,8 @@ namespace SoftwareprojektTheremin
             update.Abort();
 
             // Dispose RealSense objects
-            blobModule.Dispose();
-            blobData.Dispose();
             senseManager.Dispose();
             session.Dispose();
         }
-
-        void templateMatch(Mat img, Mat template, bool secondIteration)
-        {
-            DateTime checkTime = DateTime.Now;
-
-
-                /// Create the result matrix
-                int result_cols = img.Cols - template.Cols + 1;
-                int result_rows = img.Rows - template.Rows + 1;
-                Mat result = new Mat();
-                result.Create(result_rows, result_cols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
-
-                /// Do the Matching and Normalize
-                CvInvoke.MatchTemplate(img, template, result, Emgu.CV.CvEnum.TemplateMatchingType.CcoeffNormed);
-                CvInvoke.Normalize(result, result, 0, 1, Emgu.CV.CvEnum.NormType.MinMax, Emgu.CV.CvEnum.DepthType.Default, null);
-
-                /// Localizing the best match with minMaxLoc
-                double minVal = 0; double maxVal = 0;
-                System.Drawing.Point minLoc = new System.Drawing.Point(0, 0), maxLoc = new System.Drawing.Point(0, 0), matchLoc = new System.Drawing.Point(0, 0);
-
-                CvInvoke.MinMaxLoc(result, ref minVal, ref maxVal, ref minLoc, ref maxLoc, null);
-
-                /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
-                /*if (match_method == CV_TM_SQDIFF || match_method == CV_TM_SQDIFF_NORMED)
-                { matchLoc = minLoc; }
-                else
-                { */
-
-                matchLoc = maxLoc;
-                if (!secondIteration)
-                {
-                    blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X + template.Cols / 2;
-                    blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
-                }
-                else
-                {
-                    if (matchLoc.X <= blobCoordinates[(int)hand.LEFT, (int)cord.X])
-                    {
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = matchLoc.X + template.Cols / 2;
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
-                    }
-                    else
-                    {
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobCoordinates[(int)hand.LEFT, (int)cord.X];
-                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
-                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X + template.Cols / 2;
-                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
-                    }
-                }
-
-                // Show me what you got
-                using (var graphics = Graphics.FromImage(colorBitmap))
-                {
-                    System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
-                    graphics.DrawRectangle(fancierPen, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
-                }
-
-                if (!secondIteration)
-                {
-                    using (var graphics = Graphics.FromImage(checkBitmap))
-                    {
-                        SolidBrush fancyBrush = new SolidBrush(Color.Black);
-                        graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
-                    }
-                    checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
-                }
-            Console.WriteLine((DateTime.Now.Ticks - checkTime.Ticks)/10000);
-        }
-
-            private Bitmap scale(Bitmap image, int factor)
-    {
-        Rectangle source = new Rectangle(0, 0, image.Width, image.Height);
-        Rectangle dest = new Rectangle(0, 0, image.Width / factor, image.Height / factor);
-        var graphics = Graphics.FromImage(image);
-       
-        graphics.DrawImage(image, dest, source, GraphicsUnit.Pixel);
-
-        return image;
     }
-    }
-
-
 }
