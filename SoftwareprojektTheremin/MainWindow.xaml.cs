@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -25,8 +26,8 @@ namespace SoftwareprojektTheremin
         private PXCMSession session;
         private PXCMSenseManager senseManager;
         private Thread update;
-        private float[,] handCoordinates = new float[2, 2] { { 0, 0 }, { 0, 0 } };
-        private int heigth = 640, width = 480, fps = 30, scalingFactor = 4;
+        private float[,] handCoordinates = new float[2, 2] { { 0, 1000 }, { 0, 1000 } };
+        private int width = 640, height = 480, fps = 30, scalingFactor = 4;
         private DateTime startTime;
         private Bitmap colorBitmap, checkBitmap;
         private Mat hand1, hand2;
@@ -39,9 +40,8 @@ namespace SoftwareprojektTheremin
             //Configure RealSense session and SenseManager
             session = PXCMSession.CreateInstance();
             senseManager = session.CreateSenseManager();
-            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, heigth, width, fps);    //Get color image stream
+            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, width, height, fps);    //Get color image stream
             senseManager.Init();
-
             //Audio
             //ToDo
 
@@ -83,7 +83,7 @@ namespace SoftwareprojektTheremin
                     }
                     using (var graphics = Graphics.FromImage(template2))
                     {
-                        graphics.DrawImage(colorBitmap, dest, rectHand2, GraphicsUnit.Pixel);
+                        graphics.DrawImage(colorBitmap, dest, rectHand2, GraphicsUnit.Pixel);//hfjh
                     }
                     scale(template1, scalingFactor).Save("hand1.bmp");
                     scale(template2, scalingFactor).Save("hand2.bmp");
@@ -188,8 +188,6 @@ namespace SoftwareprojektTheremin
                 this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
                 {
                     imgStream.Source = bitmapImage;
-                    labelR.Content = handCoordinates[(int)hand.RIGHT, (int)coordinate.Y];
-                    labelL.Content = handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
                 }));
             }
         }
@@ -200,6 +198,7 @@ namespace SoftwareprojektTheremin
 
             if (bitmap != null)
             {
+                
                 if(handCoordinates[(int)hand.RIGHT, (int)coordinate.X] != 0)
                 using (var graphics = Graphics.FromImage(bitmap))
                 {
@@ -217,6 +216,7 @@ namespace SoftwareprojektTheremin
                         hand2.Rows * scalingFactor);
                 }
                 bitmap.RotateFlip(RotateFlipType.Rotate180FlipY);
+                soundUI(bitmap);
                 MemoryStream memoryStream = new MemoryStream();
                 bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                 memoryStream.Position = 0;
@@ -228,6 +228,91 @@ namespace SoftwareprojektTheremin
                 bitmapImage.Freeze();
             }
             return bitmapImage;
+        }
+
+        private void soundUI(Bitmap image)
+        {
+            int bottomOffset = 120, topOffset = 80;
+            float correctedFreqValue = (height - bottomOffset) - handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] ;
+
+            if (correctedFreqValue < 0) //disable Sound under certain margin
+            {
+                correctedFreqValue = -125.0f;
+            }
+            float frequency = 250 + correctedFreqValue * 2f;  //frequency of output wavesound  
+
+            int correctedVolumeValue = (height - bottomOffset) - (int)handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
+
+            if (correctedVolumeValue < 0) //disable Sound under certain margin
+            {
+                correctedVolumeValue = 0;
+            }
+            int volume = correctedVolumeValue * 100 / (height - bottomOffset - topOffset);  //volume of output wavesound
+
+            using (var graphics = Graphics.FromImage(image))
+            {
+                //define System.Drawing utensils for creating UI
+                Brush fancyBrush = new SolidBrush(Color.DarkGray);
+                Brush labelBrush = new SolidBrush(Color.Orange);
+                Pen fancyPen = new Pen(Color.Gray, 2);
+                Pen scalePen = new Pen(Color.Orange, 4);
+                Font labelFont = new Font("Arial", 11);
+                PointF pointVol1 = new PointF(35.0f, topOffset);
+                PointF pointVol2 = new PointF(60.0f, topOffset);
+                PointF pointVol3 = new PointF(35.0f, height-bottomOffset);
+                PointF pointFreq1 = new PointF(width-35.0f, topOffset);
+                PointF pointFreq2 = new PointF(width-55.0f, topOffset);
+                PointF pointFreq3 = new PointF(width-55.0f, height - bottomOffset);
+                PointF pointFreq4 = new PointF(width-35.0f, height - bottomOffset);
+                PointF[] volPoints = {pointVol1, pointVol2, pointVol3};
+                PointF[] freqPoints = { pointFreq1, pointFreq2, pointFreq3, pointFreq4 };
+                FillMode newFillMode = FillMode.Winding;
+
+                // Draw volume scale
+                graphics.FillPolygon(fancyBrush, volPoints, newFillMode);
+                graphics.DrawPolygon(fancyPen, volPoints);
+                graphics.DrawLine(scalePen, 70.0f, handCoordinates[(int)hand.LEFT, (int)coordinate.Y], 25.0f, handCoordinates[(int)hand.LEFT, (int)coordinate.Y]);
+                graphics.DrawString(volume.ToString(), labelFont, labelBrush, 73.0f, handCoordinates[(int)hand.LEFT, (int)coordinate.Y]-10);
+
+                // Draw frequency scale
+                graphics.FillPolygon(fancyBrush, freqPoints, newFillMode);
+                graphics.DrawPolygon(fancyPen, freqPoints);
+                graphics.DrawLine(scalePen, width-65.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y], width-25.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y]);
+                graphics.DrawString(getNote(frequency), labelFont, labelBrush, width-90.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - 10);
+            }
+        }
+
+        private string getNote(float freq)
+        {
+            // Mapping frequency to a note between c' and h''
+            if (freq < 277)
+                return "c'";
+            if (freq < 311)
+                return "d'";
+            if (freq < 339)
+                return "e'";
+            if (freq < 370)
+                return "f'";
+            if (freq < 416)
+                return "g'";
+            if (freq < 466)
+                return "a'";
+            if (freq < 508)
+                return "h'";
+            if (freq < 559)
+                return "c''";
+            if (freq < 623)
+                return "d''";
+            if (freq < 678)
+                return "e''";
+            if (freq < 740)
+                return "f''";
+            if (freq < 831)
+                return "g''";
+            if (freq < 933)
+                return "a''";
+
+            return "h''";
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
