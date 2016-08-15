@@ -47,6 +47,7 @@ namespace SoftwareprojektTheremin
 
             startTime = DateTime.Now;   //Begin of template Initialization
             update = new Thread(new ThreadStart(Update));
+            update.Start();
         }
 
         private void Update()
@@ -80,9 +81,9 @@ namespace SoftwareprojektTheremin
                     {
                         graphics.DrawImage(colorBitmap, dest, rectHand1, GraphicsUnit.Pixel);
                     }
-                    using (var graphics = Graphics.FromImage(template1))
+                    using (var graphics = Graphics.FromImage(template2))
                     {
-                        graphics.DrawImage(colorBitmap, dest, rectHand1, GraphicsUnit.Pixel);
+                        graphics.DrawImage(colorBitmap, dest, rectHand2, GraphicsUnit.Pixel);
                     }
                     scale(template1, scalingFactor).Save("hand1.bmp");
                     scale(template2, scalingFactor).Save("hand2.bmp");
@@ -96,29 +97,35 @@ namespace SoftwareprojektTheremin
                     //Initializing Template Matching
                     Bitmap colorBitmapScaled = new Bitmap(colorBitmap);
                     scale(colorBitmapScaled, scalingFactor).Save("bitmap.bmp", ImageFormat.Bmp);
-                    checkBitmap = new Bitmap(colorBitmapScaled);
+                    checkBitmap = new Bitmap(colorBitmap);
                     Mat image = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
                     templateMatch(image, hand1, false);
-                    image = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    templateMatch(image, hand2, true);
+                    Mat image2 = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(image2, hand2, true);
                 }
 
                 //Audio Output (stop current output and start new one)
                 //ToDo
 
                 render(colorBitmap);
+
+                //Release frame
+                colorBitmap.Dispose();
+                sample.color.ReleaseAccess(colorData);
+                senseManager.ReleaseFrame();
             }
         }
 
         private Bitmap scale(Bitmap image, int factor)
         {
+            Bitmap scaled = new Bitmap(image.Width / scalingFactor, image.Height / scalingFactor);
             Rectangle source = new Rectangle(0, 0, image.Width, image.Height);
             Rectangle dest = new Rectangle(0, 0, image.Width / factor, image.Height / factor);
-            var graphics = Graphics.FromImage(image);
+            var graphics = Graphics.FromImage(scaled);
 
             graphics.DrawImage(image, dest, source, GraphicsUnit.Pixel);
 
-            return image;
+            return scaled;
         }
 
         private void templateMatch(Mat image, Mat template, bool secondIteration)
@@ -143,23 +150,20 @@ namespace SoftwareprojektTheremin
             //Update hand coordinate array
             if (!secondIteration)
             {
-                handCoordinates[(int)hand.LEFT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
-                handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
+                handCoordinates[(int)hand.LEFT, (int)coordinate.X] = (matchLoc.X + template.Cols / 2) * scalingFactor;
+                handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = (matchLoc.Y + template.Rows / 2) * scalingFactor;
+            }
+            else if (matchLoc.X * scalingFactor <= handCoordinates[(int)hand.LEFT, (int)coordinate.X])
+            {
+                handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = (matchLoc.X + template.Cols / 2) * scalingFactor;
+                handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = (matchLoc.Y + template.Rows / 2) * scalingFactor;
             }
             else
             {
-                if (matchLoc.X * scalingFactor <= handCoordinates[(int)hand.LEFT, (int)coordinate.X])
-                {
-                    handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
-                    handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
-                }
-                else
-                {
-                    handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = handCoordinates[(int)hand.LEFT, (int)coordinate.X];
-                    handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
-                    handCoordinates[(int)hand.LEFT, (int)coordinate.X] = matchLoc.X + template.Cols / 2 * scalingFactor;
-                    handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = matchLoc.Y + template.Rows / 2 * scalingFactor;
-                }
+                handCoordinates[(int)hand.RIGHT, (int)coordinate.X] = handCoordinates[(int)hand.LEFT, (int)coordinate.X];
+                handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] = handCoordinates[(int)hand.LEFT, (int)coordinate.Y];
+                handCoordinates[(int)hand.LEFT, (int)coordinate.X] = (matchLoc.X + template.Cols / 2) * scalingFactor;
+                handCoordinates[(int)hand.LEFT, (int)coordinate.Y] = (matchLoc.Y + template.Rows / 2) * scalingFactor;
             }
 
             //create checkBitmap for second iteration (same bitmap, without the location of the first hand)
@@ -167,10 +171,10 @@ namespace SoftwareprojektTheremin
             {
                 using (var graphics = Graphics.FromImage(checkBitmap))
                 {
-                    SolidBrush fancyBrush = new SolidBrush(Color.Pink);
-                    graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                    SolidBrush fancyBrush = new SolidBrush(Color.HotPink);
+                    graphics.FillRectangle(fancyBrush, matchLoc.X*scalingFactor, matchLoc.Y*scalingFactor, template.Cols*scalingFactor, template.Rows*scalingFactor);
                 }
-                checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
+                scale(checkBitmap, scalingFactor).Save("checkBitmap.bmp", ImageFormat.Bmp);
             }
         }
 
@@ -201,14 +205,14 @@ namespace SoftwareprojektTheremin
                 {
                     System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
                     graphics.DrawRectangle(fancierPen,
-                        handCoordinates[(int)hand.RIGHT, (int)coordinate.X] - (hand1.Cols / 2 * scalingFactor),
-                        handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - (hand1.Rows / 2 * scalingFactor),
+                        handCoordinates[(int)hand.RIGHT, (int)coordinate.X] - (hand1.Cols * scalingFactor) / 2,
+                        handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - (hand1.Rows * scalingFactor) / 2,
                         hand1.Cols * scalingFactor,
                         hand1.Rows * scalingFactor);
 
                     graphics.DrawRectangle(fancierPen,
-                        handCoordinates[(int)hand.LEFT, (int)coordinate.X] - (hand2.Cols / 2 * scalingFactor),
-                        handCoordinates[(int)hand.LEFT, (int)coordinate.Y] - (hand2.Rows / 2 * scalingFactor),
+                        handCoordinates[(int)hand.LEFT, (int)coordinate.X] - (hand2.Cols * scalingFactor) / 2,
+                        handCoordinates[(int)hand.LEFT, (int)coordinate.Y] - (hand2.Rows * scalingFactor) / 2,
                         hand2.Cols * scalingFactor,
                         hand2.Rows * scalingFactor);
                 }
