@@ -86,6 +86,8 @@ namespace SoftwareprojektTheremin
         Bitmap colorBitmap, checkBitmap;
         DateTime startTime;
         bool templatesSet = false;
+        Mat hand1 = null;
+        Mat hand2 = null;
 
 
 
@@ -101,7 +103,7 @@ namespace SoftwareprojektTheremin
             // Configure RealSense session and SenseManager interface
             session = PXCMSession.CreateInstance();
             senseManager = session.CreateSenseManager();
-            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, 640, 480, 30);
+            senseManager.EnableStream(PXCMCapture.StreamType.STREAM_TYPE_COLOR, 320, 240, 30);
             senseManager.EnableBlob();
             senseManager.Init();
 
@@ -222,7 +224,9 @@ namespace SoftwareprojektTheremin
                         graphics.DrawImage(colorBitmap, dest, rect2, GraphicsUnit.Pixel);
                     }
                     template1.Save("hand1.bmp");
+                    hand1 = CvInvoke.Imread("hand1.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
                     template2.Save("hand2.bmp");
+                    hand2 = CvInvoke.Imread("hand2.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
                     templatesSet = true;
                 }
                 else {
@@ -230,11 +234,9 @@ namespace SoftwareprojektTheremin
                     colorBitmap.Save("bitmap.bmp", ImageFormat.Bmp);
                     //Mat img = new Mat("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.AnyColor);
                     Mat img = CvInvoke.Imread("bitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    Mat template = CvInvoke.Imread("hand1.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    templateMatch(img, template, false);
-                    template = CvInvoke.Imread("hand2.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
+                    templateMatch(img, hand1, false);
                     Mat img2 = CvInvoke.Imread("checkBitmap.bmp", Emgu.CV.CvEnum.LoadImageType.Color);
-                    templateMatch(img2, template, true);
+                    templateMatch(img2, hand2, true);
                 }
                 Render(colorBitmap);
 
@@ -320,70 +322,83 @@ namespace SoftwareprojektTheremin
 
         void templateMatch(Mat img, Mat template, bool secondIteration)
         {
-            /// Source image to display
-            /*Mat img_display = null;
-            img.CopyTo(img_display);*/
-            
-            /// Create the result matrix
-            int result_cols = img.Cols - template.Cols + 1;
-            int result_rows = img.Rows - template.Rows + 1;
-            Mat result = new Mat();
-            result.Create(result_rows, result_cols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
+            DateTime checkTime = DateTime.Now;
 
-            /// Do the Matching and Normalize
-            CvInvoke.MatchTemplate(img, template, result, Emgu.CV.CvEnum.TemplateMatchingType.CcoeffNormed);
-            CvInvoke.Normalize(result, result, 0, 1, Emgu.CV.CvEnum.NormType.MinMax, Emgu.CV.CvEnum.DepthType.Default, null);
 
-            /// Localizing the best match with minMaxLoc
-            double minVal = 0; double maxVal = 0;
-            System.Drawing.Point minLoc = new System.Drawing.Point(0,0), maxLoc = new System.Drawing.Point(0, 0), matchLoc=new System.Drawing.Point(0, 0);
+                /// Create the result matrix
+                int result_cols = img.Cols - template.Cols + 1;
+                int result_rows = img.Rows - template.Rows + 1;
+                Mat result = new Mat();
+                result.Create(result_rows, result_cols, Emgu.CV.CvEnum.DepthType.Cv32F, 1);
 
-            CvInvoke.MinMaxLoc(result, ref minVal, ref maxVal, ref minLoc, ref maxLoc, null);
+                /// Do the Matching and Normalize
+                CvInvoke.MatchTemplate(img, template, result, Emgu.CV.CvEnum.TemplateMatchingType.CcoeffNormed);
+                CvInvoke.Normalize(result, result, 0, 1, Emgu.CV.CvEnum.NormType.MinMax, Emgu.CV.CvEnum.DepthType.Default, null);
 
-            /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
-            /*if (match_method == CV_TM_SQDIFF || match_method == CV_TM_SQDIFF_NORMED)
-            { matchLoc = minLoc; }
-            else
-            { */
+                /// Localizing the best match with minMaxLoc
+                double minVal = 0; double maxVal = 0;
+                System.Drawing.Point minLoc = new System.Drawing.Point(0, 0), maxLoc = new System.Drawing.Point(0, 0), matchLoc = new System.Drawing.Point(0, 0);
 
-            matchLoc = maxLoc;
-            if (!secondIteration)
-            {
-                blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X+template.Cols/2;
-                blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y+template.Rows/2;
-            }
-            else
-            {
-                if(matchLoc.X <= blobCoordinates[(int)hand.LEFT, (int)cord.X])
-                {
-                    blobCoordinates[(int)hand.RIGHT, (int)cord.X] = matchLoc.X + template.Cols / 2;
-                    blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
-                }
+                CvInvoke.MinMaxLoc(result, ref minVal, ref maxVal, ref minLoc, ref maxLoc, null);
+
+                /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
+                /*if (match_method == CV_TM_SQDIFF || match_method == CV_TM_SQDIFF_NORMED)
+                { matchLoc = minLoc; }
                 else
+                { */
+
+                matchLoc = maxLoc;
+                if (!secondIteration)
                 {
-                    blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobCoordinates[(int)hand.LEFT, (int)cord.X];
-                    blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
                     blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X + template.Cols / 2;
                     blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
                 }
-            }
-            
-            // Show me what you got
-            using (var graphics = Graphics.FromImage(colorBitmap))
-            {
-                System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
-                graphics.DrawRectangle(fancierPen, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
-            }
-
-            if (!secondIteration)
-            {
-                using (var graphics = Graphics.FromImage(checkBitmap))
+                else
                 {
-                    SolidBrush fancyBrush = new SolidBrush(Color.Black);
-                    graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                    if (matchLoc.X <= blobCoordinates[(int)hand.LEFT, (int)cord.X])
+                    {
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = matchLoc.X + template.Cols / 2;
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
+                    }
+                    else
+                    {
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.X] = blobCoordinates[(int)hand.LEFT, (int)cord.X];
+                        blobCoordinates[(int)hand.RIGHT, (int)cord.Y] = blobCoordinates[(int)hand.LEFT, (int)cord.Y];
+                        blobCoordinates[(int)hand.LEFT, (int)cord.X] = matchLoc.X + template.Cols / 2;
+                        blobCoordinates[(int)hand.LEFT, (int)cord.Y] = matchLoc.Y + template.Rows / 2;
+                    }
                 }
-                checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
-            }
+
+                // Show me what you got
+                using (var graphics = Graphics.FromImage(colorBitmap))
+                {
+                    System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
+                    graphics.DrawRectangle(fancierPen, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                }
+
+                if (!secondIteration)
+                {
+                    using (var graphics = Graphics.FromImage(checkBitmap))
+                    {
+                        SolidBrush fancyBrush = new SolidBrush(Color.Black);
+                        graphics.FillRectangle(fancyBrush, matchLoc.X, matchLoc.Y, template.Cols, template.Rows);
+                    }
+                    checkBitmap.Save("checkBitmap.bmp", ImageFormat.Bmp);
+                }
+            Console.WriteLine((DateTime.Now.Ticks - checkTime.Ticks)/10000);
         }
+
+            private Bitmap scale(Bitmap image, int factor)
+    {
+        Rectangle source = new Rectangle(0, 0, image.Width, image.Height);
+        Rectangle dest = new Rectangle(0, 0, image.Width / factor, image.Height / factor);
+        var graphics = Graphics.FromImage(image);
+       
+        graphics.DrawImage(image, dest, source, GraphicsUnit.Pixel);
+
+        return image;
     }
+    }
+
+
 }
