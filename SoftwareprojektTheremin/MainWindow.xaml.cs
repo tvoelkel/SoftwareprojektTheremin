@@ -13,7 +13,7 @@ namespace SoftwareprojektTheremin
 {
     public partial class MainWindow : System.Windows.Window
     {
-
+        #region Enums
         enum hand : Int32
         {
             LEFT = 0, RIGHT = 1
@@ -23,11 +23,12 @@ namespace SoftwareprojektTheremin
         {
             X = 0, Y = 1
         }
+        #endregion
         #region Camera Settings
         private double settingSaturation;
         private double settingContrast;
         #endregion
-
+        #region Variables
         private Capture imageCapture;
         private Thread update;
         private float[,] handCoordinates = new float[2, 2] { { 0, float.MinValue }, { 0, float.MinValue } };
@@ -37,6 +38,7 @@ namespace SoftwareprojektTheremin
         private Mat hand1, hand2;
         private Boolean templatesSet = false; //defines whether hand-templates are already set
         private SineWaveProvider32 WaveProv = new SineWaveProvider32();
+        #endregion
 
         public MainWindow()
         {
@@ -52,15 +54,15 @@ namespace SoftwareprojektTheremin
             //Initialize camera capture settings
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameWidth, width);
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameHeight, height);
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Fps, 42);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Fps, fps);
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, 90.0);
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, 100.0);
 
             //Audio init
-            
+
             NAudio.Wave.WaveOut WOut = new NAudio.Wave.WaveOut();
 
-            WaveProv.SetWaveFormat(32000,1);
+            WaveProv.SetWaveFormat(32000, 1);
             WOut.Init(WaveProv);
             WOut.Play();
 
@@ -74,12 +76,12 @@ namespace SoftwareprojektTheremin
         private void Update()
         {
             //Start Acquire/Release frame loop
-            while (imageCapture!=null)
-            { 
+            while (imageCapture != null)
+            {
                 colorBitmap = imageCapture.QueryFrame().Bitmap;
                 Mat colorMat = new Mat();
                 CvInvoke.Resize(imageCapture.QueryFrame(), colorMat, new System.Drawing.Size(width / scalingFactor, height / scalingFactor), 0, 0, Emgu.CV.CvEnum.Inter.Cubic);
-                
+
                 if ((DateTime.Now.Ticks - startTime.Ticks) < 70000000)
                     //Initialization phase
                     using (var graphics = Graphics.FromImage(colorBitmap))
@@ -180,22 +182,22 @@ namespace SoftwareprojektTheremin
 
             if (bitmap != null)
             {
-                if(handCoordinates[(int)hand.RIGHT, (int)coordinate.X] != 0)
-                using (var graphics = Graphics.FromImage(bitmap))
-                {
-                    System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
-                    graphics.DrawRectangle(fancierPen,
-                        handCoordinates[(int)hand.RIGHT, (int)coordinate.X] - (hand1.Cols * scalingFactor) / 2,
-                        handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - (hand1.Rows * scalingFactor) / 2,
-                        hand1.Cols * scalingFactor,
-                        hand1.Rows * scalingFactor);
+                if (handCoordinates[(int)hand.RIGHT, (int)coordinate.X] != 0)
+                    using (var graphics = Graphics.FromImage(bitmap))
+                    {
+                        System.Drawing.Pen fancierPen = new System.Drawing.Pen(System.Drawing.Color.Orange, 2);
+                        graphics.DrawRectangle(fancierPen,
+                            handCoordinates[(int)hand.RIGHT, (int)coordinate.X] - (hand1.Cols * scalingFactor) / 2,
+                            handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - (hand1.Rows * scalingFactor) / 2,
+                            hand1.Cols * scalingFactor,
+                            hand1.Rows * scalingFactor);
 
-                    graphics.DrawRectangle(fancierPen,
-                        handCoordinates[(int)hand.LEFT, (int)coordinate.X] - (hand2.Cols * scalingFactor) / 2,
-                        handCoordinates[(int)hand.LEFT, (int)coordinate.Y] - (hand2.Rows * scalingFactor) / 2,
-                        hand2.Cols * scalingFactor,
-                        hand2.Rows * scalingFactor);
-                }
+                        graphics.DrawRectangle(fancierPen,
+                            handCoordinates[(int)hand.LEFT, (int)coordinate.X] - (hand2.Cols * scalingFactor) / 2,
+                            handCoordinates[(int)hand.LEFT, (int)coordinate.Y] - (hand2.Rows * scalingFactor) / 2,
+                            hand2.Cols * scalingFactor,
+                            hand2.Rows * scalingFactor);
+                    }
                 bitmap.RotateFlip(RotateFlipType.Rotate180FlipY);
                 if (handCoordinates[(int)hand.RIGHT, (int)coordinate.X] != 0)
                 {
@@ -217,8 +219,8 @@ namespace SoftwareprojektTheremin
 
         private void soundUI(Bitmap image)
         {
-            int bottomOffset = (int)(hand1.Rows*scalingFactor), topOffset = (int)(hand1.Rows/2*scalingFactor);
-            float correctedFreqValue = (height - bottomOffset) - handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] ;
+            int bottomOffset = (int)(hand1.Rows * scalingFactor), topOffset = (int)(hand1.Rows / 2 * scalingFactor);
+            float correctedFreqValue = (height - topOffset) - handCoordinates[(int)hand.RIGHT, (int)coordinate.Y];
 
             if (correctedFreqValue < 0) //disable Sound under certain margin
             {
@@ -235,7 +237,7 @@ namespace SoftwareprojektTheremin
             int volume = correctedVolumeValue * 100 / (height - bottomOffset - topOffset);  //volume of output wavesound
 
             WaveProv.Frequency = frequency;
-            WaveProv.Amplitude = (float)(volume / 100);
+            WaveProv.Amplitude = (float)volume / 100;
 
             using (var graphics = Graphics.FromImage(image))
             {
@@ -247,12 +249,12 @@ namespace SoftwareprojektTheremin
                 Font labelFont = new Font("Arial", 11);
                 PointF pointVol1 = new PointF(35.0f, topOffset);
                 PointF pointVol2 = new PointF(60.0f, topOffset);
-                PointF pointVol3 = new PointF(35.0f, height-bottomOffset);
-                PointF pointFreq1 = new PointF(width-35.0f, topOffset);
-                PointF pointFreq2 = new PointF(width-55.0f, topOffset);
-                PointF pointFreq3 = new PointF(width-55.0f, height - topOffset);
-                PointF pointFreq4 = new PointF(width-35.0f, height - topOffset);
-                PointF[] volPoints = {pointVol1, pointVol2, pointVol3};
+                PointF pointVol3 = new PointF(35.0f, height - bottomOffset);
+                PointF pointFreq1 = new PointF(width - 35.0f, topOffset);
+                PointF pointFreq2 = new PointF(width - 55.0f, topOffset);
+                PointF pointFreq3 = new PointF(width - 55.0f, height - topOffset);
+                PointF pointFreq4 = new PointF(width - 35.0f, height - topOffset);
+                PointF[] volPoints = { pointVol1, pointVol2, pointVol3 };
                 PointF[] freqPoints = { pointFreq1, pointFreq2, pointFreq3, pointFreq4 };
                 FillMode newFillMode = FillMode.Winding;
 
@@ -273,8 +275,8 @@ namespace SoftwareprojektTheremin
                 // Draw frequency scale
                 graphics.FillPolygon(fancyBrush, freqPoints, newFillMode);
                 graphics.DrawPolygon(fancyPen, freqPoints);
-                graphics.DrawLine(scalePen, width-65.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y], width-25.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y]);
-                graphics.DrawString(getNote(frequency), labelFont, labelBrush, width-90.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - 10);
+                graphics.DrawLine(scalePen, width - 65.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y], width - 25.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y]);
+                graphics.DrawString(getNote(frequency), labelFont, labelBrush, width - 90.0f, handCoordinates[(int)hand.RIGHT, (int)coordinate.Y] - 10);
             }
         }
 

@@ -14,14 +14,15 @@ namespace SoftwareprojektTheremin
             amp = 0.25f;
         }
 
-        public float Frequency {get; set;};
-        public float Amplitude {get; set;};
+        public float Frequency {get; set;}
+        public float Amplitude {get; set;}
         private float freq, amp, lastFrequency;
         private int sample = 0;
         public override int Read(float[] buffer, int offset, int sampleCount)
         {
  	        int sampleRate = WaveFormat.SampleRate;
-            
+            amp = Amplitude;
+
             if (amp < 0f)
                 amp = 0.0f;
             if (amp > 1f)
