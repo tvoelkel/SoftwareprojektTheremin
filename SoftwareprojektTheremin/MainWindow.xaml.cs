@@ -13,6 +13,7 @@ namespace SoftwareprojektTheremin
 {
     public partial class MainWindow : System.Windows.Window
     {
+
         enum hand : Int32
         {
             LEFT = 0, RIGHT = 1
@@ -22,9 +23,14 @@ namespace SoftwareprojektTheremin
         {
             X = 0, Y = 1
         }
+        #region Camera Settings
+        private double settingSaturation;
+        private double settingContrast;
+        #endregion
+
         private Capture imageCapture;
         private Thread update;
-        private float[,] handCoordinates = new float[2, 2] { { 0, float.MaxValue }, { 0, float.MaxValue } };
+        private float[,] handCoordinates = new float[2, 2] { { 0, float.MinValue }, { 0, float.MinValue } };
         private int width = 640, height = 480, fps = 30, scalingFactor = 4;
         private DateTime startTime;
         private Bitmap colorBitmap;
@@ -38,11 +44,17 @@ namespace SoftwareprojektTheremin
 
             //Initialize image capturing
             imageCapture = new Capture();
+
+            //Save previous camera settings before changing them
+            settingSaturation = imageCapture.GetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation);
+            settingContrast = imageCapture.GetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast);
+
+            //Initialize camera capture settings
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameWidth, width);
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameHeight, height);
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Fps, fps);
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, 90.0f);
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, 100.0f);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Fps, 42);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, 90.0);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, 100.0);
 
             //Audio init
             
@@ -307,6 +319,8 @@ namespace SoftwareprojektTheremin
         private void btnExit_Click(object sender, RoutedEventArgs e)
         {
             ShutDown();
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, settingSaturation);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, settingContrast);
             this.Close();
         }
 
@@ -316,8 +330,8 @@ namespace SoftwareprojektTheremin
             update.Abort();
 
             //Normalize camera settings
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, 50.0f);
-            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, 50.0f);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Staturation, settingSaturation);
+            imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, settingContrast);
             imageCapture.Dispose();
         }
     }
