@@ -30,6 +30,7 @@ namespace SoftwareprojektTheremin
         private Bitmap colorBitmap;
         private Mat hand1, hand2;
         private Boolean templatesSet = false; //defines whether hand-templates are already set
+        private SineWaveProvider32 WaveProv = new SineWaveProvider32();
 
         public MainWindow()
         {
@@ -44,7 +45,12 @@ namespace SoftwareprojektTheremin
             imageCapture.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Contrast, 100.0f);
 
             //Audio init
-            //ToDo
+            
+            NAudio.Wave.WaveOut WOut = new NAudio.Wave.WaveOut();
+
+            WaveProv.SetWaveFormat(32000,1);
+            WOut.Init(WaveProv);
+            WOut.Play();
 
             //Begin of template Initialization
             startTime = DateTime.Now;
@@ -215,6 +221,9 @@ namespace SoftwareprojektTheremin
                 correctedVolumeValue = 0;
             }
             int volume = correctedVolumeValue * 100 / (height - bottomOffset - topOffset);  //volume of output wavesound
+
+            WaveProv.Frequency = frequency;
+            WaveProv.Amplitude = (float)(volume / 100);
 
             using (var graphics = Graphics.FromImage(image))
             {
